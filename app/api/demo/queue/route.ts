@@ -8,7 +8,7 @@ export async function GET() { return NextResponse.json({ mode: 'demo', jobs }); 
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
-  const accounts = Array.isArray(body.accounts) ? body.accounts.filter((x: unknown): x is string => typeof x === 'string') : [];
+  const accounts: string[] = Array.isArray(body.accounts) ? body.accounts.filter((x: unknown): x is string => typeof x === 'string') : [];
   if (!accounts.length) return NextResponse.json({ error: 'Selecione ao menos uma conta.' }, { status: 400 });
   const createdAt = new Date().toISOString();
   const created = accounts.map((account, index) => ({ id: `demo-${Date.now()}-${index}`, account, status: 'queued' as const, createdAt }));
