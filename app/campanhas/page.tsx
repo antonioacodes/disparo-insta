@@ -1,0 +1,1 @@
+export default function Campanhas(){return <main className="main"><p className="eyebrow">Dados reais</p><h1 className="title">Campanhas</h1><div className="card" style={{marginTop:24}}><p>Nenhuma campanha registrada.</p></div></main>}
