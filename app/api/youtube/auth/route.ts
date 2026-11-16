@@ -1,0 +1,2 @@
+import { NextResponse } from 'next/server';
+export async function GET(){const clientId=process.env.YOUTUBE_CLIENT_ID;const redirect=process.env.YOUTUBE_REDIRECT_URI; if(!clientId||!redirect)return NextResponse.json({ok:false,error:'Configure YOUTUBE_CLIENT_ID e YOUTUBE_REDIRECT_URI.'},{status:503});const params=new URLSearchParams({client_id:clientId,redirect_uri:redirect,response_type:'code',access_type:'offline',scope:'https://www.googleapis.com/auth/youtube.upload',prompt:'consent'});return NextResponse.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);}
