@@ -1,0 +1,2 @@
+import Link from 'next/link'; import DashboardShell from '../../components/DashboardShell';
+export default function Reaproveitar(){return <DashboardShell active="Studio"><main className="main"><p className="eyebrow">Studio · Reaproveitar e editar</p><h1 className="title">Reaproveitar e editar</h1><div className="card" style={{marginTop:24}}><p>Envie um vídeo próprio ou autorizado para transcrição, cortes, legendas, tradução e versões verticais.</p><Link className="btn" href="/studio">Voltar ao Studio</Link></div></main></DashboardShell>}
