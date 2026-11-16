@@ -1,4 +1,4 @@
 import Link from 'next/link';
-import { CalendarDays, CircleHelp, FileText, LayoutDashboard, Megaphone, Settings, Users } from 'lucide-react';
-const nav=[['Visão geral',LayoutDashboard,'/'],['Contas',Users,'/contas'],['Publicações',FileText,'/publicacoes'],['Campanhas',Megaphone,'/campanhas'],['Calendário',CalendarDays,'/calendario'],['Configurações',Settings,'/configuracoes']] as const;
+import { CalendarDays, CircleHelp, FileText, Film, LayoutDashboard, Megaphone, Settings, Users } from 'lucide-react';
+const nav=[['Visão geral',LayoutDashboard,'/'],['Studio',Film,'/studio'],['Contas',Users,'/contas'],['Publicações',FileText,'/publicacoes'],['Campanhas',Megaphone,'/campanhas'],['Calendário',CalendarDays,'/calendario'],['Configurações',Settings,'/configuracoes']] as const;
 export default function Sidebar({active}:{active?:string}){return <aside className="sidebar"><div className="brand">disparo<span>.</span></div><div className="nav-label">Workspace</div>{nav.map(([label,Icon,href])=><Link href={href} className={'nav-item '+(active===label?'active':'')} key={label}><Icon size={18}/><span>{label}</span></Link>)}<div className="nav-label">Suporte</div><Link href="/diagnostico" className="nav-item"><CircleHelp size={18}/><span>Diagnóstico da Meta</span></Link></aside>}
