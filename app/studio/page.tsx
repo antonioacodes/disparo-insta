@@ -2,7 +2,8 @@
 import Link from 'next/link';
 import { Film, Layers3, Sparkles } from 'lucide-react';
 import DashboardShell from '../components/DashboardShell';
-const options = [
+type StudioRoute = '/studio/criar' | '/studio/reaproveitar' | '/studio/referencia';
+const options: { href: StudioRoute; icon: typeof Sparkles; title: string; text: string; badge: string; tone: string }[] = [
   { href: '/studio/criar', icon: Sparkles, title: 'Criar do zero', text: 'Briefing, roteiro, imagens, narração e vídeo a partir de uma ideia.', badge: 'Em preparação', tone: 'warn' },
   { href: '/studio/reaproveitar', icon: Film, title: 'Reaproveitar e editar', text: 'Envie um vídeo próprio ou autorizado para transcrever, cortar, legendar e adaptar.', badge: 'Disponível', tone: 'ok' },
   { href: '/studio/referencia', icon: Layers3, title: 'Adaptar referência', text: 'Use referências autorizadas para criar uma nova versão, com idioma, voz e identidade ajustáveis.', badge: 'Disponível com autorização', tone: 'ok' },
