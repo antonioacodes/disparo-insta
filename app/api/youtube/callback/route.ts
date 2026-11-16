@@ -1,0 +1,2 @@
+import { NextResponse } from 'next/server';
+export async function GET(request:Request){const code=new URL(request.url).searchParams.get('code');if(!code)return NextResponse.json({ok:false,error:'Código OAuth ausente.'},{status:400});return NextResponse.json({ok:false,error:'Callback recebido. O armazenamento seguro do refresh token precisa ser conectado ao banco antes de liberar uploads.',codeReceived:true});}
