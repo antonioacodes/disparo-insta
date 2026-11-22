@@ -16,7 +16,7 @@ export async function GET() {
 
 export async function POST(request:Request) {
   try {
-    const {action,id,title,start,end,corrections,preset} = await request.json();
+    const {action,id,title,start,end,corrections,preset,deletePreview} = await request.json();
     if(action==='captions' && typeof id==='string' && /^[a-f0-9]{32}-\d+$/.test(id)) return NextResponse.json(JSON.parse(await worker(['captions',id])));
     if(action==='revise' && typeof id==='string' && /^[a-f0-9]{32}-\d+$/.test(id) && typeof title==='string' && Number.isFinite(start) && Number.isFinite(end)){
       return NextResponse.json({version:await worker(['revise',id,title.slice(0,200),String(start),String(end),JSON.stringify(corrections||{})])},{status:201});
@@ -25,7 +25,7 @@ export async function POST(request:Request) {
       return NextResponse.json({project:await worker(['create',id,title.trim().slice(0,200),JSON.stringify(preset||{})])},{status:201});
     }
     if (['approve','reject'].includes(action) && typeof id==='string' && /^[a-f0-9]{32}-\d+$/.test(id)) {
-      await worker([action,id]);
+      await worker(action==='reject' && deletePreview===true?[action,id,'delete-preview']:[action,id]);
       return NextResponse.json({ok:true});
     }
     return NextResponse.json({error:'Solicitação inválida.'},{status:400});

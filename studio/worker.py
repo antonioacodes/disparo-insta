@@ -11,6 +11,8 @@ import uuid
 import urllib.request
 from pathlib import Path
 
+from studio.cache import maintain, remove_preview, RETENTION
+
 ROOT = Path("storage").resolve()
 WORK = ROOT / "studio"
 WORK.mkdir(parents=True, exist_ok=True)
@@ -19,6 +21,8 @@ db.row_factory = sqlite3.Row
 db.executescript("""
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
+CREATE TABLE IF NOT EXISTS preview_cache(clip TEXT PRIMARY KEY,expires REAL,removed INTEGER);
+CREATE TABLE IF NOT EXISTS media_info(project TEXT PRIMARY KEY,details TEXT);
 CREATE TABLE IF NOT EXISTS audience(clip TEXT PRIMARY KEY REFERENCES clips(id), result TEXT, model TEXT);
 CREATE TABLE IF NOT EXISTS presets(project TEXT PRIMARY KEY, settings TEXT);
 CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY, media TEXT NOT NULL, title TEXT NOT NULL, duration REAL, transcript TEXT);
@@ -171,9 +175,11 @@ def render(cid, final):
     filters += f"[{layer}]"+(f"subtitles={subtitle}:force_style='FontName={font}'" if burn else "null")+"[out]"
     command(["ffmpeg","-loglevel","error","-y","-ss",str(row["start"]),"-i",str(ROOT/"media"/row["media"]),"-t",str(row["end"]-row["start"]),"-filter_complex",filters,"-map","[out]","-map","0:a:0?","-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-movflags","+faststart",str(tmp)])
     tmp.replace(out)
+    if not final:
+        db.execute("INSERT OR REPLACE INTO preview_cache VALUES(?,?,0)", (cid,time.time()+RETENTION))
     db.execute("UPDATE clips SET state=? WHERE id=?",("rendered" if final else "pending_review",cid))
 
-def review(cid, approve):
+def review(cid, approve, delete_preview=False):
     db.execute("BEGIN IMMEDIATE")
     result = db.execute("UPDATE clips SET state=? WHERE id=? AND state='pending_review'",("approved" if approve else "rejected",cid))
     if result.rowcount != 1:
@@ -181,6 +187,12 @@ def review(cid, approve):
         raise ValueError("Corte indisponível para revisão")
     if approve:
         enqueue("final",cid)
+    elif delete_preview:
+        project_id = db.execute("SELECT project FROM clips WHERE id=?", (cid,)).fetchone()[0]
+        db.execute("INSERT OR REPLACE INTO preview_cache VALUES(?,0,0)", (cid,))
+        db.commit()
+        remove_preview(WORK, project_id, cid)
+        db.execute("UPDATE preview_cache SET removed=1 WHERE clip=?", (cid,))
     db.commit()
 
 def captions(cid,connection=db):
@@ -220,7 +232,7 @@ def audience_loop(clip_id=None):
     dimensions = ["Gancho", "Engajamento", "Clareza", "Ritmo"]
     while True:
         row = conn.execute("""SELECT c.* FROM clips c LEFT JOIN audience a ON a.clip=c.id
-                            WHERE (a.clip IS NULL OR (? AND a.model!='tinytroupe') OR ? IS NOT NULL) AND c.state!='detected' AND (? IS NULL OR c.id=?)
+                            WHERE (a.clip IS NULL OR (? AND a.model!='tinytroupe') OR ? IS NOT NULL) AND c.state NOT IN ('detected','rejected') AND NOT EXISTS (SELECT 1 FROM preview_cache pc WHERE pc.clip=c.id AND (pc.removed=1 OR pc.expires<=CAST(strftime('%s','now') AS INTEGER))) AND (? IS NULL OR c.id=?)
                             ORDER BY c.rowid LIMIT 1""",(tiny,clip_id,clip_id,clip_id)).fetchone()
         if not row:
             if clip_id:
@@ -282,6 +294,7 @@ def worker():
                       WHERE kind IN ('preview','final') AND state='failed'
                       AND error=?""", ("module 'cv2' has no attribute 'CascadeClassifier'",))
         import threading
+        threading.Thread(target=maintain,args=(WORK,),daemon=True).start()
         threading.Thread(target=audience_loop,daemon=True).start()
         while True:
             job = db.execute("SELECT * FROM jobs WHERE state='queued' ORDER BY id LIMIT 1").fetchone()
@@ -316,8 +329,10 @@ if __name__ == "__main__":
         print(revise(*opts.args))
     elif opts.action == "list":
         listing={table:[dict(row) for row in db.execute("SELECT * FROM "+table)] for table in ("projects","clips","jobs","revisions")}
+        listing["cache"]={r["clip"]:dict(r) for r in db.execute("SELECT * FROM preview_cache")}
+        listing["info"]={r["project"]:json.loads(r["details"]) for r in db.execute("SELECT * FROM media_info")}
         listing["audience"]={r["clip"]:json.loads(r["result"]) for r in db.execute("SELECT * FROM audience")}
         listing["audienceEnabled"]=bool(os.getenv("STUDIO_AUDIENCE_PROVIDER")=="tinytroupe" or os.getenv("STUDIO_AUDIENCE_MODEL") or os.getenv("STUDIO_EDITOR_MODEL"))
         print(json.dumps(listing))
     else:
-        review(opts.args[0], opts.action=="approve")
+        review(opts.args[0], opts.action=="approve", opts.args[1:]==["delete-preview"])

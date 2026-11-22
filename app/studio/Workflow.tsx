@@ -1,5 +1,5 @@
 'use client';
-import {useCallback,useEffect,useState} from 'react';
+import {useCallback,useEffect,useRef,useState} from 'react';
 type Project={id:string;title:string;media:string};
 type Clip={id:string;project:string;title:string;state:string;score:number;rationale:string;start:number;end:number};
 type Job={kind:string;entity:string;state:string;error:string|null};
@@ -16,8 +16,13 @@ function Audience({v,pending}:{v?:Verdict;pending:string}){
     {v.personas.map(person=><p key={person.perfil}><strong>{person.perfil}</strong> · {person.motivo}</p>)}
   </details>;
 }
-export default function Workflow(){
-  const [data,setData]=useState<{projects:Project[];clips:Clip[];jobs:Job[];audience?:Record<string,Verdict>;audienceEnabled?:boolean;revisions?:{id:string;parent:string}[]}>({projects:[],clips:[],jobs:[]});
+type Brief={id:string;title:string;brief?:string;language?:string;stage:string};
+type Info={width?:number;height?:number;fps?:number;format?:string;codec?:string;language?:string};
+export default function Workflow({briefs}:{briefs:Brief[]}){
+  const dialog=useRef<HTMLDialogElement>(null);
+  const [rejectId,setRejectId]=useState('');
+  const [deletePreview,setDeletePreview]=useState(true);
+  const [data,setData]=useState<{cache?:Record<string,{expires:number;removed:number}>;info?:Record<string,Info>;projects:Project[];clips:Clip[];jobs:Job[];audience?:Record<string,Verdict>;audienceEnabled?:boolean;revisions?:{id:string;parent:string}[]}>({projects:[],clips:[],jobs:[]});
   const parents=new Map((data.revisions||[]).map(r=>[r.id,r.parent] as const));
   function root(id:string){while(parents.has(id)) id=parents.get(id)!;return id;}
   const [selected,select]=useState('');
@@ -41,13 +46,15 @@ export default function Workflow(){
   async function act(action:string,id:string,title='',start?:number,end?:number,corrections?:Record<string,string>){
     setBusy(true);setError('');
     try{
-      const r=await fetch('/api/studio/workflow',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,id,title,start,end,corrections,preset})});
+      const r=await fetch('/api/studio/workflow',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,id,title,start,end,corrections,preset,deletePreview:action==='reject'&&deletePreview})});
       if(!r.ok) throw Error((await r.json()).error);
+      if(action==='reject') dialog.current?.close();
       if(action==='captions'){const rows=await r.json();setCaptions(previous=>({...previous,[id]:rows}));}else await refresh();
     }catch(e){setError(e instanceof Error?e.message:'Falha ao salvar.');}finally{setBusy(false);}
   }
   function stage(c:Clip){
     const job=data.jobs.find(j=>j.entity===c.id && j.kind===(c.state==='approved'?'final':'preview'));
+    if(data.cache?.[c.id]?.removed && c.state==='pending_review') return 'Prévia expirada';
     if(job?.state==='failed') return 'Falha ao gerar vídeo';
     if(c.state==='detected') return job?.state==='running'?'Gerando prévia':'Prévia na fila';
     return ({pending_review:'Pronto para assistir',approved:'Exportando',rendered:'Vídeo final pronto',rejected:'Rejeitado'} as Record<string,string>)[c.state]||c.state;
@@ -59,19 +66,23 @@ export default function Workflow(){
       const rejected=new Set(clips.filter(c=>c.state==='rejected'&&!approved.has(root(c.id))).map(c=>root(c.id)));
       const source=files.find(f=>f.id===p.media);
       return <button type="button" className="card" key={p.id} aria-pressed={selected===p.id} onClick={()=>select(p.id)} style={{textAlign:'left',borderColor:selected===p.id?'#6648cf':undefined}}>
-        <strong>{source?.originalName||p.title}</strong><p>{roots.size} cortes · {approved.size} aprovados · {rejected.size} com rejeição</p><small>Transcrição em português · Original {source?(source.bytes/1048576).toFixed(1)+' MB':'indisponível'}</small></button>
-    })}</div><h2>Produção e revisão</h2>{!selected&&<p>Selecione um projeto acima para revisar os cortes.</p>}
+        <strong>{p.title||source?.originalName}</strong><p>{roots.size} cortes · {approved.size} aprovados · {rejected.size} com rejeição</p><small>Transcrição em português · Original {source?(source.bytes/1048576).toFixed(1)+' MB':'indisponível'}</small></button>
+    })}{briefs.map(b=><button type="button" className="card" key={b.id} aria-pressed={selected===b.id} onClick={()=>select(b.id)}><strong>{b.title}</strong><p>Briefing registrado</p></button>)}</div><h2>Produção e revisão</h2>{!selected&&<p>Selecione um projeto acima para revisar os cortes.</p>}
+    <dialog ref={dialog} aria-labelledby="reject-heading" className="card"><h3 id="reject-heading">Rejeitar esta versão?</h3><p>{data.clips.find(c=>c.id===rejectId)?.title}</p><label><input type="checkbox" checked={deletePreview} onChange={e=>setDeletePreview(e.target.checked)}/> Excluir o vídeo desta prévia da VPS</label><p>O original e as outras versões continuam disponíveis.</p><button className="btn secondary" disabled={busy} onClick={()=>dialog.current?.close()}>Cancelar</button> <button className="btn" disabled={busy} onClick={()=>act('reject',rejectId)}>Confirmar rejeição</button>{error&&<p role="alert">{error}</p>}</dialog>
+    {briefs.filter(b=>b.id===selected).map(b=><article className="card" key={b.id}><h3>{b.title}</h3><p>{b.brief}</p>{b.language&&<p>Idioma do projeto · {b.language}</p>}</article>)}
     {error&&<p role="alert">{error}</p>}
     {files.filter(f=>!data.projects.some(p=>p.media===f.id)).map(f=><p key={f.id}>{f.originalName} <a className="btn secondary" href={'/studio/reaproveitar?media='+encodeURIComponent(f.id)}>Configurar cortes</a></p>)}
-    {data.projects.filter(p=>p.id===selected).map(p=><article className="card" key={p.id}><h3>{p.title}</h3>
+    {data.projects.filter(p=>p.id===selected).map(p=><article className="card" key={p.id}><h3>{p.title}</h3><p>{files.find(f=>f.id===p.media)?.originalName||p.media}</p>
+      {(()=>{const m=data.info?.[p.id];return <p>{[m?.width&&m.height&&`${m.width} × ${m.height}`,m?.format && (p.media.split('.').pop()?.toUpperCase() || m.format),m?.codec,m?.fps&&`${m.fps} FPS`,m?.language&&m.language!=='und'?'Idioma do áudio · '+m.language:'Idioma do áudio não informado','Transcrição · Português'].filter(Boolean).join(' · ')}</p>})()}
       {data.jobs.filter(j=>j.entity===p.id).filter(j=>j.state!=='done').map(j=><p key={j.entity+j.state}>{j.error||(({running:'Processando',queued:'Na fila'} as Record<string,string>)[j.state]||j.state)}</p>)}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,320px),1fr))',gap:16}}>{data.clips.filter(c=>c.project===p.id&&!parents.has(c.id)).map(original=><article key={original.id} style={{padding:18,border:'1px solid #dedeea',borderRadius:18,background:'#fff',boxShadow:'0 4px 18px #2824430d'}}>
       {data.clips.filter(c=>root(c.id)===original.id).map((c,index)=><section key={c.id}><small style={{fontWeight:700,color:'#5737aa'}}>{stage(c)} · Versão {index+1}</small><h3>{c.title}</h3><p>{Math.round(c.start)}–{Math.round(c.end)} s · Sugestão de revisão · {c.score}/100 · {c.rationale}</p>
         <Audience v={data.audience?.[c.id]} pending={c.state==='detected'?'Aguardando prévia':data.audienceEnabled?'Aguardando avaliação':'Modelo de público não configurado'}/>
         {c.state==='detected'&&<details><summary>Assistir ao trecho original</summary><video preload="none" controls style={{width:'100%'}} src={'/api/studio/media/'+encodeURIComponent(p.media)+'#t='+c.start+','+c.end}/></details>}
         {data.jobs.filter(j=>j.entity===c.id&&j.state==='failed').map(j=><p role="alert" key={j.kind}>{j.error}</p>)}
-        {c.state!=='detected'&&<video preload="none" poster={'/api/studio/workflow/poster?id='+c.id} controls playsInline style={{height:300,width:'100%',objectFit:'contain',background:'#171523',borderRadius:12}} src={'/api/studio/workflow/video?id='+c.id+'&kind='+(c.state==='rendered'?'final':'preview')}/>}
-        {c.state==='pending_review'?<p><button className="btn" style={{background:'#17643e',color:'white'}} disabled={busy} onClick={()=>act('approve',c.id)}>✓ Aprovar e exportar</button> <button className="btn" style={{background:'#fff1ef',color:'#962922',border:'1px solid #e8b7b2'}} disabled={busy} onClick={()=>act('reject',c.id)}>× Rejeitar</button><small style={{display:'block',marginTop:8}}>Aprovar gera o arquivo final. Rejeitar encerra a revisão desta versão.</small></p>:null}
+        {c.state!=='rendered'&&!!data.cache?.[c.id]&&<p><small>{data.cache[c.id].removed?'Arquivo da prévia excluído':`Prévia será excluída automaticamente em ${Math.max(0,Math.ceil((data.cache[c.id].expires-Date.now()/1000)/86400))} dia(s)`}</small></p>}
+        {c.state!=='detected'&&(c.state==='rendered'||!data.cache?.[c.id]?.removed)&&<video preload="none" poster={'/api/studio/workflow/poster?id='+c.id} controls playsInline style={{height:300,width:'100%',objectFit:'contain',background:'#171523',borderRadius:12}} src={'/api/studio/workflow/video?id='+c.id+'&kind='+(c.state==='rendered'?'final':'preview')}/>}
+        {c.state==='pending_review'?<p><button className="btn" style={{background:'#17643e',color:'white'}} disabled={busy||!!data.cache?.[c.id]?.removed} onClick={()=>act('approve',c.id)}>✓ Aprovar e exportar</button> <button className="btn" style={{background:'#fff1ef',color:'#962922',border:'1px solid #e8b7b2'}} disabled={busy} onClick={()=>{setError('');setRejectId(c.id);setDeletePreview(true);dialog.current?.showModal()}}>× Rejeitar</button><small style={{display:'block',marginTop:8}}>Aprovar gera o arquivo final. Rejeitar encerra a revisão desta versão.</small></p>:null}
         <details><summary>Ajustar corte e legendas</summary><p>Ao salvar, você recebe outra prévia para comparar. A versão anterior continua no histórico.</p><form onSubmit={event=>{
           event.preventDefault();
           const fields=new FormData(event.currentTarget);

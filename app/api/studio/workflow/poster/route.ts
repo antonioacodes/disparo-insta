@@ -10,8 +10,8 @@ async function cover(project: string, id: string) {
   const dir = path.join(process.cwd(), 'storage', 'studio', project);
   const jpg = path.join(dir, id + '-poster.jpg');
   try { return await readFile(jpg); } catch {}
-  const input = path.join(dir, id + '-preview.mp4');
-  await stat(input);
+  let input = path.join(dir, id + '-preview.mp4');
+  try { await stat(input); } catch { input = path.join(dir, id + '-final.mp4'); }
   await run('ffmpeg', ['-nostdin','-loglevel','error','-y','-ss','0.5','-i',input,'-frames:v','1','-vf','scale=320:-2','-threads','1',jpg+'.tmp.jpg'], {timeout:20000});
   await rename(jpg+'.tmp.jpg',jpg);
   return readFile(jpg);
