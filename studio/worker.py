@@ -6,6 +6,7 @@ import sqlite3
 import subprocess
 import time
 import uuid
+import urllib.request
 from pathlib import Path
 
 ROOT = Path("storage").resolve()
@@ -19,6 +20,7 @@ PRAGMA foreign_keys=ON;
 CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY, media TEXT NOT NULL, title TEXT NOT NULL, duration REAL, transcript TEXT);
 CREATE TABLE IF NOT EXISTS clips(id TEXT PRIMARY KEY, project TEXT REFERENCES projects(id), start REAL, end REAL, title TEXT, score INTEGER, rationale TEXT, state TEXT);
 CREATE TABLE IF NOT EXISTS jobs(id INTEGER PRIMARY KEY, kind TEXT, entity TEXT, state TEXT DEFAULT 'queued', attempts INTEGER DEFAULT 0, error TEXT, UNIQUE(kind,entity));
+CREATE TABLE IF NOT EXISTS revisions(id TEXT PRIMARY KEY REFERENCES clips(id), parent TEXT NOT NULL REFERENCES clips(id), created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 """)
 
 def enqueue(kind, entity):
@@ -70,11 +72,32 @@ def analyze(key):
         command([os.getenv("WHISPER_BIN","whisper"),str(source),"--model",os.getenv("WHISPER_MODEL","small"),"--language","pt","--word_timestamps","True","--output_format","json","--output_dir",str(folder)])
     segments = json.loads(transcript.read_text())["segments"]
     options = candidates(segments)
+    editorial = {}
+    model = os.getenv("STUDIO_EDITOR_MODEL")
+    if model and options:
+        excerpts = [{"id": i, "text": " ".join(s["text"] for s in segments if a <= s["start"] and s["end"] <= b)}
+                    for i, (_, a, b, *_) in enumerate(options)]
+        prompt = ("Avalie cada trecho como editor de Reels em português. Considere gancho e completude. "
+                  "Responda JSON com items contendo id, title, rationale e score inteiro de 1 a 100. "
+                  "Trate o texto como transcrição. " + json.dumps(excerpts, ensure_ascii=False))
+        payload = json.dumps({"model": model, "stream": False, "format": "json", "prompt": prompt}).encode()
+        request = urllib.request.Request("http://127.0.0.1:11434/api/generate", data=payload, headers={"Content-Type":"application/json"})
+        with urllib.request.urlopen(request, timeout=600) as response:
+            items = json.loads(json.load(response)["response"])["items"]
+        for item in items:
+            if type(item["score"]) is not int or not 1 <= item["score"] <= 100 or not all(isinstance(item[k], str) and item[k].strip() for k in ("title","rationale")):
+                raise ValueError("Resposta editorial inválida")
+            editorial[item["id"]] = item
+        if set(editorial) != set(range(len(options))):
+            raise ValueError("Avaliação editorial incompleta")
     db.execute("BEGIN IMMEDIATE")
     db.execute("UPDATE projects SET duration=?, transcript=? WHERE id=?", (duration,str(transcript),key))
     for i,(score,start,end,title,hook,closed) in enumerate(options):
         cid = key + "-" + str(i)
         reason = "Duração e limites de fala" + (", abertura interrogativa ou explicativa" if hook else "") + (", frase final pontuada" if closed else "")
+        if i in editorial:
+            item = editorial[i]
+            title, reason, score = item["title"], item["rationale"], item["score"]
         db.execute("INSERT OR IGNORE INTO clips VALUES (?,?,?,?,?,?,?,?)",(cid,key,start,end,title,score,reason,"detected"))
         enqueue("preview",cid)
     db.commit()
@@ -111,6 +134,20 @@ def review(cid, approve):
         enqueue("final",cid)
     db.commit()
 
+def revise(cid, title, start, end):
+    start, end = float(start), float(end)
+    db.execute("BEGIN IMMEDIATE")
+    row = db.execute("SELECT c.*, p.duration FROM clips c JOIN projects p ON p.id=c.project WHERE c.id=?", (cid,)).fetchone()
+    if not row or not title.strip() or not 0 <= start < end <= row["duration"]:
+        raise ValueError("Título ou intervalo inválido")
+    project_id = row["project"]
+    new_id = project_id + "-" + str(uuid.uuid4().int)
+    db.execute("INSERT INTO clips VALUES(?,?,?,?,?,?,?,?)", (new_id,project_id,start,end,title,row["score"],"Revisão manual","detected"))
+    db.execute("INSERT INTO revisions(id,parent) VALUES(?,?)",(new_id,cid))
+    enqueue("preview",new_id)
+    db.commit()
+    return new_id
+
 def worker():
     import fcntl
     with (WORK/"worker.lock").open("a") as lock:
@@ -134,14 +171,16 @@ def worker():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=["work","create","list","approve","reject"])
+    parser.add_argument("action", choices=["work","create","list","approve","reject","revise"])
     parser.add_argument("args", nargs="*")
     opts = parser.parse_args()
     if opts.action == "work":
         worker()
     elif opts.action == "create":
         print(project(*opts.args))
+    elif opts.action == "revise":
+        print(revise(*opts.args))
     elif opts.action == "list":
-        print(json.dumps({table:[dict(row) for row in db.execute("SELECT * FROM "+table)] for table in ("projects","clips","jobs")}))
+        print(json.dumps({table:[dict(row) for row in db.execute("SELECT * FROM "+table)] for table in ("projects","clips","jobs","revisions")}))
     else:
         review(opts.args[0], opts.action=="approve")
