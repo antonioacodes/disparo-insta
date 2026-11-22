@@ -41,13 +41,13 @@ export default function Workflow(){
     {files.filter(f=>!data.projects.some(p=>p.media===f.id)).map(f=><p key={f.id}>{f.originalName} <button disabled={busy} onClick={()=>act('create',f.id,f.originalName)}>Gerar sugestões</button></p>)}
     {data.projects.map(p=><article className="card" key={p.id}><h3>{p.title}</h3>
       {data.jobs.filter(j=>j.entity===p.id).filter(j=>j.state!=='done').map(j=><p key={j.entity+j.state}>{j.error||(({running:'Processando',queued:'Na fila'} as Record<string,string>)[j.state]||j.state)}</p>)}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,320px),1fr))',gap:16}}>{data.clips.filter(c=>c.project===p.id&&!parents.has(c.id)).map(original=><article key={original.id} style={{padding:18,border:'1px solid #dedeea',borderRadius:14,background:'#fafaff'}}>
-      {data.clips.filter(c=>root(c.id)===original.id).map((c,index)=><section key={c.id}><small style={{fontWeight:700,color:'#5737aa'}}>{stage(c)} · Versão {index+1}</small><h3>{c.title}</h3><p>{Math.round(c.start)}–{Math.round(c.end)} s · Prioridade {c.score}/100 · {c.rationale}</p>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,320px),1fr))',gap:16}}>{data.clips.filter(c=>c.project===p.id&&!parents.has(c.id)).map(original=><article key={original.id} style={{padding:18,border:'1px solid #dedeea',borderRadius:18,background:'#fff',boxShadow:'0 4px 18px #2824430d'}}>
+      {data.clips.filter(c=>root(c.id)===original.id).map((c,index)=><section key={c.id}><small style={{fontWeight:700,color:'#5737aa'}}>{stage(c)} · Versão {index+1}</small><h3>{c.title}</h3><p>{Math.round(c.start)}–{Math.round(c.end)} s · Sugestão de revisão · {c.score}/100 · {c.rationale}</p>
         {c.state==='detected'&&<details><summary>Assistir ao trecho original</summary><video preload="none" controls style={{width:'100%'}} src={'/api/studio/media/'+encodeURIComponent(p.media)+'#t='+c.start+','+c.end}/></details>}
         {data.jobs.filter(j=>j.entity===c.id&&j.state==='failed').map(j=><p role="alert" key={j.kind}>{j.error}</p>)}
-        {c.state!=='detected'&&<video preload="none" controls style={{maxHeight:300,maxWidth:'100%'}} src={'/api/studio/workflow/video?id='+c.id+'&kind='+(c.state==='rendered'?'final':'preview')}/>}
-        {c.state==='pending_review'?<p><button disabled={busy} onClick={()=>act('approve',c.id)}>Aprovar e exportar</button> <button disabled={busy} onClick={()=>act('reject',c.id)}>Rejeitar</button></p>:null}
-        <details><summary>Editar em nova versão</summary><form onSubmit={event=>{
+        {c.state!=='detected'&&<video preload="none" poster={'/api/studio/workflow/poster?id='+c.id} controls playsInline style={{height:300,width:'100%',objectFit:'contain',background:'#171523',borderRadius:12}} src={'/api/studio/workflow/video?id='+c.id+'&kind='+(c.state==='rendered'?'final':'preview')}/>}
+        {c.state==='pending_review'?<p><button className="btn" style={{background:'#17643e',color:'white'}} disabled={busy} onClick={()=>act('approve',c.id)}>✓ Aprovar e exportar</button> <button className="btn" style={{background:'#fff1ef',color:'#962922',border:'1px solid #e8b7b2'}} disabled={busy} onClick={()=>act('reject',c.id)}>× Rejeitar</button><small style={{display:'block',marginTop:8}}>Aprovar gera o arquivo final. Rejeitar encerra a revisão desta versão.</small></p>:null}
+        <details><summary>Ajustar corte e legendas</summary><p>Ao salvar, você recebe outra prévia para comparar. A versão anterior continua no histórico.</p><form onSubmit={event=>{
           event.preventDefault();
           const fields=new FormData(event.currentTarget);
           const edits:Record<string,string>={};
