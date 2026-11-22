@@ -124,7 +124,10 @@ def render(cid, final):
     crop = f"crop={w}:{h}"
     if os.getenv("STUDIO_FRAMING") == "mouth_motion":
         from studio.framing import crop_x
-        crop += ":x=" + crop_x(ROOT/"media"/row["media"], row["start"], row["end"])
+        try:
+            crop += ":x=" + crop_x(ROOT/"media"/row["media"], row["start"], row["end"])
+        except (ImportError, AttributeError) as exc:
+            print(f"Enquadramento central em {cid}: {exc}", flush=True)
     command(["ffmpeg","-loglevel","error","-y","-ss",str(row["start"]),"-i",str(ROOT/"media"/row["media"]),"-t",str(row["end"]-row["start"]),"-vf",f"scale={w}:{h}:force_original_aspect_ratio=increase,{crop},subtitles={subtitle}","-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-movflags","+faststart",str(tmp)])
     tmp.replace(out)
     db.execute("UPDATE clips SET state=? WHERE id=?",("rendered" if final else "pending_review",cid))
@@ -168,6 +171,9 @@ def worker():
     with (WORK/"worker.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         db.execute("UPDATE jobs SET state='queued' WHERE state='running'")
+        db.execute("""UPDATE jobs SET state='queued', error=NULL
+                      WHERE kind IN ('preview','final') AND state='failed'
+                      AND error=?""", ("module 'cv2' has no attribute 'CascadeClassifier'",))
         while True:
             job = db.execute("SELECT * FROM jobs WHERE state='queued' ORDER BY id LIMIT 1").fetchone()
             if job is None:
