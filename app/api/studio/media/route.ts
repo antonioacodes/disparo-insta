@@ -1,6 +1,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import { NextResponse } from 'next/server';
+export const dynamic='force-dynamic';
 export const runtime='nodejs';
 const root=path.join(process.cwd(),'storage','media');
 const meta=path.join(process.cwd(),'storage','media-meta');
