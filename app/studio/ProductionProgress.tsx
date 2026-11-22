@@ -1,5 +1,8 @@
 'use client';
 
+import {ProcessingDetails} from './ProcessingDetails';
+import {PreviewSounds} from './PreviewSounds';
+
 type Job = {kind:string;entity:string;state:string;error:string|null;stage?:string;started?:number};
 type Props = {eta?:{low:number;high:number};project:string;clipIds:Set<string>;jobs:Job[];offline:boolean};
 
@@ -27,6 +30,9 @@ export function ProductionProgress({project,clipIds,jobs,offline,eta}:Props){
     <small>{total>0 ? [previews.filter(j=>j.state==='running').length+' em processamento',previews.filter(j=>j.state==='queued').length+' na fila'].join(' · ') :
       processing?'O total de cortes aparece após a seleção dos trechos.':''}
       {elapsed>0 && ' · Tarefa atual há '+Math.floor(elapsed/60)+' min '+elapsed%60+' s'}</small>
+    {processing&&!offline&&<p className="productionTip">{ready>0?'Já dá para assistir aos cortes prontos enquanto preparo os próximos.':eta && eta.low>=180?'Dá tempo de tomar um café. Enquanto isso, sigo preparando seus cortes.':'Pode acompanhar por aqui. Cada prévia aparece assim que fica pronta.'}</p>}
+    <PreviewSounds key={project} completed={previews.filter(j=>j.state==='done').map(j=>j.entity)} finished={total>0&&ready===total&&!processing&&!failures.length}/>
+    <ProcessingDetails key={'details-'+project} project={project}/>
     {failures.map(j=><p key={j.kind+j.entity} role="alert">{j.error||'Falha na tarefa.'}</p>)}
   </section>;
 }

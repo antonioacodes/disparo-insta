@@ -32,6 +32,26 @@ CREATE TABLE IF NOT EXISTS clips(id TEXT PRIMARY KEY, project TEXT REFERENCES pr
 CREATE TABLE IF NOT EXISTS jobs(id INTEGER PRIMARY KEY, kind TEXT, entity TEXT, state TEXT DEFAULT 'queued', attempts INTEGER DEFAULT 0, error TEXT, UNIQUE(kind,entity));
 CREATE TABLE IF NOT EXISTS job_finish(job INTEGER PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,finished INTEGER);
 CREATE TABLE IF NOT EXISTS job_progress(job INTEGER PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE, stage TEXT, started INTEGER);
+CREATE TABLE IF NOT EXISTS processing_events(
+ id INTEGER PRIMARY KEY, job INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+ at INTEGER NOT NULL DEFAULT (strftime('%s','now')), message TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS events_by_job ON processing_events(job);
+CREATE TRIGGER IF NOT EXISTS studio_queue_event AFTER INSERT ON jobs BEGIN
+ INSERT INTO processing_events(job,message) VALUES(NEW.id,'Na fila');
+END;
+CREATE TRIGGER IF NOT EXISTS studio_stage_event AFTER INSERT ON job_progress BEGIN
+ INSERT INTO processing_events(job,message) VALUES(NEW.job,NEW.stage);
+END;
+CREATE TRIGGER IF NOT EXISTS studio_stage_change AFTER UPDATE OF stage ON job_progress
+WHEN OLD.stage<>NEW.stage BEGIN
+ INSERT INTO processing_events(job,message) VALUES(NEW.job,NEW.stage);
+END;
+CREATE TRIGGER IF NOT EXISTS studio_state_event AFTER UPDATE OF state ON jobs
+WHEN OLD.state<>NEW.state AND NEW.state IN ('done','failed','queued') BEGIN
+ INSERT INTO processing_events(job,message) VALUES(NEW.id,CASE NEW.state
+ WHEN 'done' THEN 'Concluído' WHEN 'queued' THEN 'Voltou para a fila'
+ ELSE 'Falha: ' || COALESCE(NEW.error,'não foi possível concluir') END);
+END;
 CREATE TABLE IF NOT EXISTS revisions(id TEXT PRIMARY KEY REFERENCES clips(id), parent TEXT NOT NULL REFERENCES clips(id), created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS caption_edits(clip TEXT REFERENCES clips(id), segment INTEGER, text TEXT, PRIMARY KEY(clip,segment));
 """)
@@ -392,10 +412,16 @@ def worker():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=["work","create","list","approve","reject","revise","captions","audience","delete-project","import"])
+    parser.add_argument("action", choices=["work","create","list","approve","reject","revise","captions","audience","delete-project","import","history"])
     parser.add_argument("args", nargs="*")
     opts = parser.parse_args()
-    if opts.action == "delete-project":
+    if opts.action == "history":
+        project_id, = opts.args
+        rows = db.execute("""SELECT e.id,e.at,e.message,j.kind,c.title FROM processing_events e
+            JOIN jobs j ON j.id=e.job LEFT JOIN clips c ON c.id=j.entity
+            WHERE j.entity=? OR c.project=? ORDER BY e.id""",(project_id,project_id))
+        print(json.dumps([dict(row) for row in rows]))
+    elif opts.action == "delete-project":
         delete_project(db,WORK,opts.args[0])
     elif opts.action == "audience":
         audience_loop(opts.args[0] if opts.args else None)

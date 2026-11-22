@@ -9,7 +9,13 @@ async function worker(args:string[]) {
   return stdout.trim();
 }
 
-export async function GET() {
+export async function GET(request:Request) {
+  const project = new URL(request.url).searchParams.get('history');
+  if(project !== null){
+    if(!/^[a-f0-9]{32}$/.test(project)) return NextResponse.json({error:'Projeto inválido.'},{status:400});
+    try {return NextResponse.json(JSON.parse(await worker(['history',project])));}
+    catch {return NextResponse.json({error:'Falha ao carregar o histórico.'},{status:503});}
+  }
   try { return NextResponse.json(JSON.parse(await worker(['list']))); }
   catch { return NextResponse.json({error:'Falha ao consultar a fila do Studio.'},{status:503}); }
 }
