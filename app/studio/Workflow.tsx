@@ -1,11 +1,23 @@
 'use client';
 import {useCallback,useEffect,useRef,useState} from 'react';
+import {Check, X, SlidersHorizontal, Captions, Save} from 'lucide-react';
 type Project={id:string;title:string;media:string};
 type Clip={id:string;project:string;title:string;state:string;score:number;rationale:string;start:number;end:number};
 type Job={kind:string;entity:string;state:string;error:string|null};
 type Verdict={motor?:string;geral:number; dimensoes:Record<string,number>; resumo:string; sugestao:string; personas:{perfil:string;motivo:string}[]; erro?:string};
-function Audience({v,pending}:{v?:Verdict;pending:string}){
-  if(!v || v.erro) return <p><small>Público simulado · {v?.erro||pending}</small></p>;
+const guide='https://github.com/antonioacodes/disparo-insta/blob/feat/painel-fila-meta/docs/teste-tinytroupe.md';
+function Audience({v,status,clip,removed}:{v?:Verdict;status?:string;clip:Clip;removed:boolean}){
+  if(!v || v.erro){
+    let message='Aguardando a avaliação com '+status+'.';
+    if(status==='disabled') message='Avaliação desativada no processador do Studio.';
+    if(status==='offline') message='O processador do Studio está offline.';
+    if(!status || status==='unknown') message='O processador ainda não informou a configuração de público.';
+    if(clip.state==='detected') message='A avaliação pode começar quando a prévia ficar pronta.';
+    if(clip.state==='rejected'||removed) message='Esta versão está encerrada sem uma avaliação.';
+    return <details className="reviewDetail"><summary>Teste de público <small>{v?.erro?'Falhou':clip.state==='rejected'||removed?'Encerrado':status==='disabled'?'Desativado':status==='offline'?'Processador offline':clip.state==='detected'?'Aguardando prévia':'Sem nota'}</small></summary>
+      <p>{v?.erro||message}</p><p>Cinco perfis simulados avaliam gancho, engajamento, clareza e ritmo.</p>
+      <a href={guide} target="_blank" rel="noreferrer">Como ativar e testar o TinyTroupe</a></details>;
+  }
   const color=v.geral<40?'#ba3434':v.geral<75?'#ba740b':'#208456';
   return <details style={{padding:12,background:'#f7f7fb',borderRadius:12}}><summary style={{cursor:'pointer'}}>
     <span style={{display:'inline-grid',placeItems:'center',borderRadius:'50%',width:58,height:58,verticalAlign:'middle',background:`conic-gradient(${color} ${v.geral}%,#dedee6 0)`}}>
@@ -14,6 +26,21 @@ function Audience({v,pending}:{v?:Verdict;pending:string}){
     {Object.entries(v.dimensoes).map(([name,n])=><p key={name}>{name} · {n}/100 <meter min={0} max={100} value={n}/></p>)}
     <p><strong>Ajuste sugerido</strong> {v.sugestao}</p>
     {v.personas.map(person=><p key={person.perfil}><strong>{person.perfil}</strong> · {person.motivo}</p>)}
+  </details>;
+}
+function timecode(seconds:number){
+  const total=Math.floor(seconds);
+  return Math.floor(total/60)+':'+String(total%60).padStart(2,'0');
+}
+function SelectionReason({clip}:{clip:Clip}){
+  if(clip.rationale==='Revisão manual') return <p className="clipTime">Versão ajustada manualmente</p>;
+  const rules=clip.rationale.startsWith('Duração e limites de fala');
+  return <details className="reviewDetail"><summary>Por que este trecho foi escolhido?</summary>
+    <p><strong>{clip.score}/100 · {rules?'Prioridade pelas regras de seleção':'Avaliação editorial'}</strong></p>
+    {rules?<ul><li>Trechos de 30 a 65 segundos são candidatos. A duração preferida é 45 segundos.</li>
+      {clip.rationale.includes('abertura')&&<li>A primeira fala contém uma pergunta ou uma expressão como “como” ou “por que”.</li>}
+      {clip.rationale.includes('pontuada')&&<li>A última fala termina com pontuação na transcrição.</li>}</ul>:<p>{clip.rationale}</p>}
+    <p>Essa nota ajuda a escolher trechos para revisão. A reação estimada dos espectadores aparece no teste de público.</p>
   </details>;
 }
 type Brief={id:string;title:string;brief?:string;language?:string;stage:string};
@@ -40,7 +67,7 @@ export default function Workflow({briefs,reload}:{briefs:Brief[];reload:()=>Prom
   const dialog=useRef<HTMLDialogElement>(null);
   const [rejectId,setRejectId]=useState('');
   const [deletePreview,setDeletePreview]=useState(true);
-  const [data,setData]=useState<{cache?:Record<string,{expires:number;removed:number}>;info?:Record<string,Info>;projects:Project[];clips:Clip[];jobs:Job[];audience?:Record<string,Verdict>;audienceEnabled?:boolean;revisions?:{id:string;parent:string}[]}>({projects:[],clips:[],jobs:[]});
+  const [data,setData]=useState<{cache?:Record<string,{expires:number;removed:number}>;info?:Record<string,Info>;projects:Project[];clips:Clip[];jobs:Job[];audience?:Record<string,Verdict>;audienceStatus?:string;revisions?:{id:string;parent:string}[]}>({projects:[],clips:[],jobs:[]});
   const parents=new Map((data.revisions||[]).map(r=>[r.id,r.parent] as const));
   function root(id:string){while(parents.has(id)) id=parents.get(id)!;return id;}
   const [selected,select]=useState('');
@@ -95,27 +122,31 @@ export default function Workflow({briefs,reload}:{briefs:Brief[];reload:()=>Prom
       {(()=>{const m=data.info?.[p.id];return <p>{[m?.width&&m.height&&`${m.width} × ${m.height}`,m?.format && (p.media.split('.').pop()?.toUpperCase() || m.format),m?.codec,m?.fps&&`${m.fps} FPS`,m?.language&&m.language!=='und'?'Idioma do áudio · '+m.language:'Idioma do áudio não informado','Transcrição · Português'].filter(Boolean).join(' · ')}</p>})()}
       {deleteButton(p)}
       {data.jobs.filter(j=>j.entity===p.id).filter(j=>j.state!=='done').map(j=><p key={j.entity+j.state}>{j.error||(j.kind==='purge'?'Exclusão solicitada':j.kind==='import'?(j.state==='running'?'Baixando e preparando o vídeo':'Importação na fila'):null)||(({running:'Processando',queued:'Na fila'} as Record<string,string>)[j.state]||j.state)}</p>)}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,320px),1fr))',gap:16}}>{data.clips.filter(c=>c.project===p.id&&!parents.has(c.id)).map(original=><article key={original.id} style={{padding:18,border:'1px solid #dedeea',borderRadius:18,background:'#fff',boxShadow:'0 4px 18px #2824430d'}}>
-      {data.clips.filter(c=>root(c.id)===original.id).map((c,index)=><section key={c.id}><small style={{fontWeight:700,color:'#5737aa'}}>{stage(c)} · Versão {index+1}</small><h3>{c.title}</h3><p>{Math.round(c.start)}–{Math.round(c.end)} s · Sugestão de revisão · {c.score}/100 · {c.rationale}</p>
-        <Audience v={data.audience?.[c.id]} pending={c.state==='detected'?'Aguardando prévia':data.audienceEnabled?'Aguardando avaliação':'Modelo de público não configurado'}/>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,320px),1fr))',gap:16}}>{data.clips.filter(c=>c.project===p.id&&!parents.has(c.id)).map(original=><article key={original.id} className="clipCard">
+      {data.clips.filter(c=>root(c.id)===original.id).map((c,index)=><section className="clipVersion" key={c.id}>
+        <header><span className="clipState">{stage(c)}</span><small>Versão {index+1}</small></header>
+        <h3>{c.title}</h3><p className="clipTime">{timecode(c.start)} a {timecode(c.end)} no original · {Number((c.end-c.start).toFixed(1))} s de duração</p>
         {c.state==='detected'&&<details><summary>Assistir ao trecho original</summary><video preload="none" controls style={{width:'100%'}} src={'/api/studio/media/'+encodeURIComponent(p.media)+'#t='+c.start+','+c.end}/></details>}
         {data.jobs.filter(j=>j.entity===c.id&&j.state==='failed').map(j=><p role="alert" key={j.kind}>{j.error}</p>)}
         {c.state!=='rendered'&&!!data.cache?.[c.id]&&<p><small>{data.cache[c.id].removed?'Arquivo da prévia excluído':`Prévia será excluída automaticamente em ${Math.max(0,Math.ceil((data.cache[c.id].expires-Date.now()/1000)/86400))} dia(s)`}</small></p>}
         {c.state!=='detected'&&(c.state==='rendered'||!data.cache?.[c.id]?.removed)&&<video preload="none" poster={'/api/studio/workflow/poster?id='+c.id} controls playsInline style={{height:300,width:'100%',objectFit:'contain',background:'#171523',borderRadius:12}} src={'/api/studio/workflow/video?id='+c.id+'&kind='+(c.state==='rendered'?'final':'preview')}/>}
-        {c.state==='pending_review'?<p><button className="btn" style={{background:'#17643e',color:'white'}} disabled={busy||!!data.cache?.[c.id]?.removed} onClick={()=>act('approve',c.id)}>✓ Aprovar e exportar</button> <button className="btn" style={{background:'#fff1ef',color:'#962922',border:'1px solid #e8b7b2'}} disabled={busy} onClick={()=>{setError('');setRejectId(c.id);setDeletePreview(true);dialog.current?.showModal()}}>× Rejeitar</button><small style={{display:'block',marginTop:8}}>Aprovar gera o arquivo final. Rejeitar encerra a revisão desta versão.</small></p>:null}
-        <details><summary>Ajustar corte e legendas</summary><p>Ao salvar, você recebe outra prévia para comparar. A versão anterior continua no histórico.</p><form onSubmit={event=>{
+        {c.state==='pending_review'?<div className="clipActions"><button className="reviewBtn approve" disabled={busy||!!data.cache?.[c.id]?.removed} onClick={()=>act('approve',c.id)}><Check size={16}/> Aprovar e exportar</button> <button className="reviewBtn reject" disabled={busy} onClick={()=>{setError('');setRejectId(c.id);setDeletePreview(true);dialog.current?.showModal()}}><X size={16}/> Rejeitar</button></div>:null}
+        <SelectionReason clip={c}/>
+        <Audience v={data.audience?.[c.id]} status={data.audienceStatus} clip={c} removed={!!data.cache?.[c.id]?.removed}/>
+        <details className="reviewDetail"><summary><SlidersHorizontal size={16}/> Editar corte e legendas</summary><p>Ao salvar, você recebe outra prévia para comparar. A versão anterior continua no histórico.</p><form className="clipEditor" onSubmit={event=>{
           event.preventDefault();
           const fields=new FormData(event.currentTarget);
+          if(Number(fields.get('end'))<=Number(fields.get('start'))){setError('O fim do corte precisa ser posterior ao início.');return;}
           const edits:Record<string,string>={};
           for(const row of captions[c.id]||[]) edits[String(row.id)]=String(fields.get('caption-'+row.id)??row.text);
           void act('revise',c.id,String(fields.get('title')),Number(fields.get('start')),Number(fields.get('end')),edits);
         }}>
-          <label>Título <input name="title" required defaultValue={c.title}/></label>
-          <label>Início (s) <input name="start" required type="number" min="0" step="any" defaultValue={c.start}/></label>
-          <label>Fim (s) <input name="end" required type="number" min="0" step="any" defaultValue={c.end}/></label>
-          <button type="button" disabled={busy} onClick={()=>act('captions',c.id)}>Carregar legendas</button>
+          <label>Título do corte<input maxLength={200} name="title" required defaultValue={c.title}/></label>
+          <div className="clipBounds"><label>Início no original (s) <input name="start" required type="number" min="0" step="any" defaultValue={c.start}/></label>
+          <label>Fim no original (s) <input name="end" required type="number" min="0" step="any" defaultValue={c.end}/></label></div>
+          <button className="reviewBtn secondary" type="button" disabled={busy} onClick={()=>act('captions',c.id)}><Captions size={16}/> Carregar legendas</button>
           {(captions[c.id]||[]).map(row=><label key={row.id}>{row.start.toFixed(1)} s <input name={'caption-'+row.id} defaultValue={row.text} maxLength={1000}/></label>)}
-          <button disabled={busy}>Salvar versão e gerar prévia</button>
+          <button className="reviewBtn primary" disabled={busy}><Save size={16}/> Salvar nova versão</button>
         </form></details>
       </section>)}</article>)}</div></article>)}</section>;
 }

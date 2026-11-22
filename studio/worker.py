@@ -300,10 +300,32 @@ def audience_loop(clip_id=None):
             print(json.dumps(verdict,ensure_ascii=False))
             return
 
+def audience_status():
+    import fcntl
+    try:
+        with (WORK/"worker.lock").open() as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_SH | fcntl.LOCK_NB)
+            except BlockingIOError:
+                value = lock.read().strip()
+                return value if value in ("TinyTroupe","Ollama","disabled") else "unknown"
+    except FileNotFoundError:
+        pass
+    return "offline"
+
+
 def worker():
     import fcntl
     with (WORK/"worker.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        provider = "disabled"
+        if os.getenv("STUDIO_AUDIENCE_PROVIDER") == "tinytroupe":
+            provider = "TinyTroupe"
+        elif os.getenv("STUDIO_AUDIENCE_MODEL") or os.getenv("STUDIO_EDITOR_MODEL"):
+            provider = "Ollama"
+        lock.truncate(0)
+        lock.write(provider)
+        lock.flush()
         db.execute("UPDATE jobs SET state='queued' WHERE state='running'")
         db.execute("""UPDATE jobs SET state='queued', error=NULL
                       WHERE kind IN ('preview','final') AND state='failed'
@@ -369,7 +391,8 @@ if __name__ == "__main__":
         listing["cache"]={r["clip"]:dict(r) for r in db.execute("SELECT * FROM preview_cache")}
         listing["info"]={r["project"]:json.loads(r["details"]) for r in db.execute("SELECT * FROM media_info")}
         listing["audience"]={r["clip"]:json.loads(r["result"]) for r in db.execute("SELECT * FROM audience")}
-        listing["audienceEnabled"]=bool(os.getenv("STUDIO_AUDIENCE_PROVIDER")=="tinytroupe" or os.getenv("STUDIO_AUDIENCE_MODEL") or os.getenv("STUDIO_EDITOR_MODEL"))
+        listing["audienceStatus"]=audience_status()
+        listing["audienceEnabled"]=listing["audienceStatus"] in ("TinyTroupe","Ollama")
         print(json.dumps(listing))
     else:
         review(opts.args[0], opts.action=="approve", opts.args[1:]==["delete-preview"])
