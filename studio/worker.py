@@ -30,12 +30,20 @@ CREATE TABLE IF NOT EXISTS presets(project TEXT PRIMARY KEY, settings TEXT);
 CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY, media TEXT NOT NULL, title TEXT NOT NULL, duration REAL, transcript TEXT);
 CREATE TABLE IF NOT EXISTS clips(id TEXT PRIMARY KEY, project TEXT REFERENCES projects(id), start REAL, end REAL, title TEXT, score INTEGER, rationale TEXT, state TEXT);
 CREATE TABLE IF NOT EXISTS jobs(id INTEGER PRIMARY KEY, kind TEXT, entity TEXT, state TEXT DEFAULT 'queued', attempts INTEGER DEFAULT 0, error TEXT, UNIQUE(kind,entity));
+CREATE TABLE IF NOT EXISTS job_progress(job INTEGER PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE, stage TEXT, started INTEGER);
 CREATE TABLE IF NOT EXISTS revisions(id TEXT PRIMARY KEY REFERENCES clips(id), parent TEXT NOT NULL REFERENCES clips(id), created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS caption_edits(clip TEXT REFERENCES clips(id), segment INTEGER, text TEXT, PRIMARY KEY(clip,segment));
 """)
 
 def enqueue(kind, entity):
     db.execute("INSERT OR IGNORE INTO jobs(kind,entity) VALUES (?,?)", (kind, entity))
+
+def progress(kind, entity, stage):
+    db.execute("""INSERT INTO job_progress(job,stage,started)
+        SELECT id,?,? FROM jobs WHERE kind=? AND entity=? AND state='running'
+        ON CONFLICT(job) DO UPDATE SET stage=excluded.stage""",
+        (stage, int(time.time()), kind, entity))
+
 
 def command(args):
     return subprocess.run(args, check=True, capture_output=True, text=True, timeout=7200).stdout
@@ -87,6 +95,7 @@ def candidates(segments):
     return chosen
 
 def analyze(key):
+    progress("analyze",key,"Lendo o vídeo")
     row = db.execute("SELECT * FROM projects WHERE id=?", (key,)).fetchone()
     source = ROOT / "media" / row["media"]
     duration = float(command(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0",str(source)]).strip())
@@ -94,12 +103,15 @@ def analyze(key):
     folder.mkdir(exist_ok=True)
     transcript = folder / (source.stem + ".json")
     if not transcript.exists():
+        progress("analyze",key,"Transcrevendo a fala")
         command([os.getenv("WHISPER_BIN","whisper"),str(source),"--model",os.getenv("WHISPER_MODEL","small"),"--language","pt","--word_timestamps","True","--output_format","json","--output_dir",str(folder)])
     segments = json.loads(transcript.read_text())["segments"]
+    progress("analyze",key,"Selecionando os trechos")
     options = candidates(segments)
     editorial = {}
     model = os.getenv("STUDIO_EDITOR_MODEL")
     if model and options:
+        progress("analyze",key,"Avaliando os trechos selecionados")
         excerpts = [{"id": i, "text": " ".join(s["text"] for s in segments if a <= s["start"] and s["end"] <= b)}
                     for i, (_, a, b, *_) in enumerate(options)]
         prompt = ("Avalie cada trecho como editor de Reels em português. Considere gancho e completude. "
@@ -128,6 +140,8 @@ def analyze(key):
     db.commit()
 
 def render(cid, final):
+    kind = "final" if final else "preview"
+    progress(kind,cid,"Preparando o enquadramento")
     row = db.execute("SELECT c.*,p.media,p.transcript FROM clips c JOIN projects p ON p.id=c.project WHERE c.id=?", (cid,)).fetchone()
     if final and row["state"] != "approved":
         raise ValueError("Aprovação obrigatória")
@@ -153,6 +167,7 @@ def render(cid, final):
     mode = settings.get("captions","generate")
     blocks = []
     if mode in ("generate","auto"):
+        progress(kind,cid,"Detectando legendas no vídeo" if mode=="auto" else "Preparando as legendas")
         for seg in captions(cid):
             a,b = max(row["start"],seg["start"]),min(row["end"],seg["end"])
             if b<=a:
@@ -176,6 +191,7 @@ def render(cid, final):
         layer = "combined"
     font = settings.get("font","DejaVu Sans")
     if burn and settings.get("animation")=="fade":
+        progress(kind,cid,"Preparando a animação das legendas")
         import re
         ass = subtitle.with_suffix(".ass")
         command(["ffmpeg","-loglevel","error","-y","-i",str(subtitle),str(ass)])
@@ -188,6 +204,7 @@ def render(cid, final):
         ass.write_text("\n".join(lines))
         subtitle = ass
     filters += f"[{layer}]"+(f"subtitles={subtitle}:force_style='FontName={font}'" if burn else "null")+"[out]"
+    progress(kind,cid,"Gerando o vídeo final" if final else "Gerando a prévia")
     command(["ffmpeg","-loglevel","error","-y","-ss",str(row["start"]),"-i",str(ROOT/"media"/row["media"]),"-t",str(row["end"]-row["start"]),"-filter_complex",filters,"-map","[out]","-map","0:a:0?","-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-movflags","+faststart",str(tmp)])
     tmp.replace(out)
     if not final:
@@ -340,10 +357,12 @@ def worker():
                 continue
             if not db.execute("UPDATE jobs SET state='running',attempts=attempts+1 WHERE id=? AND state='queued'", (job["id"],)).rowcount:
                 continue
+            db.execute("DELETE FROM job_progress WHERE job=?", (job["id"],))
             try:
                 if job["kind"] == "purge":
                     delete_project(db, WORK, job["entity"])
                 elif job["kind"] == "import":
+                    progress("import",job["entity"],"Importando o vídeo por link")
                     from studio.link_source import download
                     key = job["entity"]
                     target = ROOT / "media" / (key+"-original.mkv")
@@ -387,7 +406,9 @@ if __name__ == "__main__":
     elif opts.action == "revise":
         print(revise(*opts.args))
     elif opts.action == "list":
-        listing={table:[dict(row) for row in db.execute("SELECT * FROM "+table)] for table in ("projects","clips","jobs","revisions")}
+        listing={table:[dict(row) for row in db.execute("SELECT * FROM "+table)] for table in ("projects","clips","revisions")}
+        listing["jobs"]=[dict(row) for row in db.execute("""SELECT j.*,p.stage,p.started FROM jobs j
+                           LEFT JOIN job_progress p ON p.job=j.id ORDER BY j.id""")]
         listing["cache"]={r["clip"]:dict(r) for r in db.execute("SELECT * FROM preview_cache")}
         listing["info"]={r["project"]:json.loads(r["details"]) for r in db.execute("SELECT * FROM media_info")}
         listing["audience"]={r["clip"]:json.loads(r["result"]) for r in db.execute("SELECT * FROM audience")}

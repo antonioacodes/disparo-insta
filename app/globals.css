@@ -45,3 +45,8 @@
 .reviewBtn.approve{background:#17643e;color:white}.reviewBtn.reject{color:#90272b;background:#fff2f1;border-color:#edcbca}
 .reviewBtn.primary{background:var(--purple);color:white}.reviewBtn.secondary{background:#f2eff8;color:#4e3e67}
 .reviewBtn:disabled{opacity:.55;cursor:default}
+
+.productionProgress{display:grid;gap:9px;background:#f7f5fd;border:1px solid #e1dbef;border-radius:14px;padding:16px;margin:16px 0}
+.productionProgress header{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.productionProgress small{color:#575167}
+.productionProgress progress{display:block;width:100%;height:9px;accent-color:var(--purple)}

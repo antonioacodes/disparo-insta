@@ -1,5 +1,6 @@
 'use client';
 import {useCallback,useEffect,useRef,useState} from 'react';
+import {ProductionProgress} from './ProductionProgress';
 import {Check, X, SlidersHorizontal, Captions, Save} from 'lucide-react';
 type Project={id:string;title:string;media:string};
 type Clip={id:string;project:string;title:string;state:string;score:number;rationale:string;start:number;end:number};
@@ -82,6 +83,7 @@ export default function Workflow({briefs,reload}:{briefs:Brief[];reload:()=>Prom
     setData(await response.json());
   },[]);
   useEffect(()=>{
+    select(new URLSearchParams(location.search).get('project')||'');
     const poll=()=>refresh().catch(e=>setError(e.message));
     void poll();
     fetch('/api/studio/media',{cache:'no-store'}).then(r=>r.json()).then(d=>setFiles(d.media||[])).catch(()=>setError('Falha ao carregar os vídeos.'));
@@ -121,12 +123,13 @@ export default function Workflow({briefs,reload}:{briefs:Brief[];reload:()=>Prom
     {data.projects.filter(p=>p.id===selected).map(p=><article className="card" key={p.id}><h3>{p.title}</h3><p>{files.find(f=>f.id===p.media)?.originalName||p.media}</p>
       {(()=>{const m=data.info?.[p.id];return <p>{[m?.width&&m.height&&`${m.width} × ${m.height}`,m?.format && (p.media.split('.').pop()?.toUpperCase() || m.format),m?.codec,m?.fps&&`${m.fps} FPS`,m?.language&&m.language!=='und'?'Idioma do áudio · '+m.language:'Idioma do áudio não informado','Transcrição · Português'].filter(Boolean).join(' · ')}</p>})()}
       {deleteButton(p)}
-      {data.jobs.filter(j=>j.entity===p.id).filter(j=>j.state!=='done').map(j=><p key={j.entity+j.state}>{j.error||(j.kind==='purge'?'Exclusão solicitada':j.kind==='import'?(j.state==='running'?'Baixando e preparando o vídeo':'Importação na fila'):null)||(({running:'Processando',queued:'Na fila'} as Record<string,string>)[j.state]||j.state)}</p>)}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,320px),1fr))',gap:16}}>{data.clips.filter(c=>c.project===p.id&&!parents.has(c.id)).map(original=><article key={original.id} className="clipCard">
-      {data.clips.filter(c=>root(c.id)===original.id).map((c,index)=><section className="clipVersion" key={c.id}>
+      {data.jobs.filter(j=>j.entity===p.id && j.kind==='purge').filter(j=>j.state!=='done').map(j=><p key={j.entity+j.state}>{j.error||(j.kind==='purge'?'Exclusão solicitada':j.kind==='import'?(j.state==='running'?'Baixando e preparando o vídeo':'Importação na fila'):null)||(({running:'Processando',queued:'Na fila'} as Record<string,string>)[j.state]||j.state)}</p>)}
+      <ProductionProgress project={p.id} jobs={data.jobs} clipIds={new Set(data.clips.filter(c=>c.project===p.id).map(c=>c.id))} offline={data.audienceStatus==='offline'}/>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,320px),1fr))',gap:16}}>{data.clips.filter(c=>c.project===p.id&&!parents.has(c.id)&&(c.state!=='detected'||data.clips.some(v=>parents.has(v.id)&&root(v.id)===c.id&&v.state!=='detected'))).map(original=><article key={original.id} className="clipCard">
+      {data.clips.filter(c=>root(c.id)===original.id).map((c,index)=>c.state==='detected'?null:<section className="clipVersion" key={c.id}>
         <header><span className="clipState">{stage(c)}</span><small>Versão {index+1}</small></header>
         <h3>{c.title}</h3><p className="clipTime">{timecode(c.start)} a {timecode(c.end)} no original · {Number((c.end-c.start).toFixed(1))} s de duração</p>
-        {c.state==='detected'&&<details><summary>Assistir ao trecho original</summary><video preload="none" controls style={{width:'100%'}} src={'/api/studio/media/'+encodeURIComponent(p.media)+'#t='+c.start+','+c.end}/></details>}
+
         {data.jobs.filter(j=>j.entity===c.id&&j.state==='failed').map(j=><p role="alert" key={j.kind}>{j.error}</p>)}
         {c.state!=='rendered'&&!!data.cache?.[c.id]&&<p><small>{data.cache[c.id].removed?'Arquivo da prévia excluído':`Prévia será excluída automaticamente em ${Math.max(0,Math.ceil((data.cache[c.id].expires-Date.now()/1000)/86400))} dia(s)`}</small></p>}
         {c.state!=='detected'&&(c.state==='rendered'||!data.cache?.[c.id]?.removed)&&<video preload="none" poster={'/api/studio/workflow/poster?id='+c.id} controls playsInline style={{height:300,width:'100%',objectFit:'contain',background:'#171523',borderRadius:12}} src={'/api/studio/workflow/video?id='+c.id+'&kind='+(c.state==='rendered'?'final':'preview')}/>}
