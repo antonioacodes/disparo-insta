@@ -175,8 +175,11 @@ def render(cid, final):
     w,h = (1080,1920) if final else (360,640)
     out = folder / (cid+("-final.mp4" if final else "-preview.mp4"))
     tmp = out.with_suffix(".partial.mp4")
+    record = db.execute("SELECT settings FROM presets WHERE project=?", (row["project"],)).fetchone()
+    settings = json.loads(record[0]) if record else {}
+    face = settings.get("facecam","off")
     crop = f"crop={w}:{h}"
-    if os.getenv("STUDIO_FRAMING") == "mouth_motion":
+    if face=="off" and os.getenv("STUDIO_FRAMING") == "mouth_motion":
         from studio.framing import crop_x
         try:
             crop += ":x=" + crop_x(ROOT/"media"/row["media"], row["start"], row["end"])
@@ -184,8 +187,6 @@ def render(cid, final):
             print(f"Enquadramento central em {cid}: {exc}", flush=True)
     from studio.presets import missing_caption_spans, face_region, peaks
     source = ROOT/"media"/row["media"]
-    record = db.execute("SELECT settings FROM presets WHERE project=?", (row["project"],)).fetchone()
-    settings = json.loads(record[0]) if record else {}
     mode = settings.get("captions","generate")
     blocks = []
     if mode in ("generate","auto"):
@@ -199,17 +200,14 @@ def render(cid, final):
                 blocks.append(f"{len(blocks)+1}\n{stamp(left-row['start'])} --> {stamp(right-row['start'])}\n{seg['text'].strip()}\n")
     subtitle.write_text("\n".join(blocks))
     burn = bool(blocks)
-    base = f"scale={w}:{h}:force_original_aspect_ratio=increase,{crop}"
-    if mode in ("auto","preserve"):
-        base = f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2"
+    base = f"scale={w}:{h}:force_original_aspect_ratio=increase,{crop},setsar=1"
     filters = "[0:v]"+base+"[base];"
-    face = settings.get("facecam","off")
     region = face_region(source,row["start"],row["end"]) if face!="off" else None
     layer = "base"
     if region:
-        side,x,y = region
+        cw,ch,x,y = region
         enable = peaks(source,row["start"],row["end"]) if face=="peaks" else "1"
-        filters += f"[0:v]crop={side}:{side}:{x}:{y},scale={w//3}:-2[cam];[base][cam]overlay=W-w-12:12:enable='{enable}'[combined];"
+        filters += f"[0:v]crop={cw}:{ch}:{x}:{y},scale={w//3}:-2[cam];[base][cam]overlay=W-w-12:12:enable='{enable}'[combined];"
         layer = "combined"
     font = settings.get("font","DejaVu Sans")
     if burn and settings.get("animation")=="fade":

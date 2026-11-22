@@ -25,18 +25,51 @@ def missing_caption_spans(source,start,end):
         left = right
     return spans
 
+def camera_bounds(frames, cx, cy, size):
+    """Find persistent panel edges around the tracked face, in sample coordinates."""
+    import numpy as np
+    def bounds(samples, center, cross, radius):
+        # Score each edge by its contrast across the face and across multiple frames.
+        lo = max(0, round(cross-size*.38))
+        hi = min(samples.shape[1], round(cross+size*.38)+1)
+        contrasts = np.abs(np.diff(samples[:,lo:hi,:].astype("int16"),axis=2))
+        scores = np.median(contrasts,axis=(0,1))
+        limit = samples.shape[2]
+        def edge(direction):
+            positions = np.arange(round(center+direction*size*.55),
+                                  round(center+direction*size*radius),direction)
+            positions = positions[(positions>=1)&(positions<limit)]
+            if len(positions):
+                peak = positions[np.argmax(scores[positions-1])]
+                if scores[peak-1]>=14:
+                    return peak-direction
+            return None
+        return edge(-1),edge(1)
+    samples = np.stack(frames)
+    left,right = bounds(samples,cx,cy,2.6)
+    top,bottom = bounds(samples.transpose(0,2,1),cy,cx,2.1)
+    # Where an edge blends into the scene, stay close to the detected face.
+    h,w = samples.shape[1:]
+    return (max(0,left if left is not None else round(cx-size*.64)),
+            max(0,top if top is not None else round(cy-size*.70)),
+            min(w,right if right is not None else round(cx+size*.64)),
+            min(h,bottom if bottom is not None else round(cy+size*.52)))
+
+
 def face_region(source,start,end):
     import cv2
     cap=cv2.VideoCapture(str(source))
     try:
         detect=cv2.CascadeClassifier(cv2.data.haarcascades+"haarcascade_frontalface_default.xml")
         tracks=[]
+        frames={}
         for i in range(8):
             cap.set(cv2.CAP_PROP_POS_MSEC,(start+(end-start)*(i+.5)/8)*1000)
             ok,frame=cap.read()
             if not ok: continue
             height,width=frame.shape[:2]
             gray=cv2.cvtColor(cv2.resize(frame,(640,round(height*640/width))),cv2.COLOR_BGR2GRAY)
+            frames[i]=gray
             for x,y,w,h in detect.detectMultiScale(gray,1.1,5,minSize=(22,22)):
                 if w>210: continue
                 center=((x+w/2)/640,(y+h/2)/gray.shape[0])
@@ -49,8 +82,12 @@ def face_region(source,start,end):
         if not stable: return None
         best=max(stable,key=len)
         cx,cy,fw=[sum(v[j] for v in best)/len(best) for j in range(3)]
-        side=int(min(width,height,fw*width*2.4))//2*2
-        return side,max(0,min(width-side,int(cx*width-side/2))),max(0,min(height-side,int(cy*height-side*.45)))
+        sampled=[frames[i] for i in sorted({v[3] for v in best})]
+        sh,sw=sampled[0].shape
+        l,t,r,b=camera_bounds(sampled,cx*sw,cy*sh,fw*sw)
+        x,y=math.ceil(l*width/sw/2)*2,math.ceil(t*height/sh/2)*2
+        cw,ch=int(r*width/sw/2)*2-x,int(b*height/sh/2)*2-y
+        return (cw,ch,x,y) if min(cw,ch)>=2 else None
     finally:
         cap.release()
 

@@ -7,8 +7,8 @@ export function EditingStyle({value,onChange}:{value:typeof defaults;onChange:(v
   const notes:Record<string, Record<string,string>>={
     captions:{
       generate:'Grava a transcrição da fala na imagem com a fonte escolhida. Use em vídeos sem legenda embutida para evitar texto sobreposto.',
-      preserve:'Mantém a imagem inteira, incluindo as legendas que já aparecem nela. O corte fica sem uma segunda camada de texto.',
-      auto:'Durante cada fala, procura texto na parte inferior da imagem a cada meio segundo. Acrescenta legendas nos intervalos sem texto detectado e preserva a imagem inteira.',
+      preserve:'Mantém as legendas embutidas que ficam dentro do recorte vertical.',
+      auto:'Durante cada fala, procura texto na parte inferior da imagem a cada meio segundo. Acrescenta legendas nos intervalos sem texto detectado.',
       off:'Desliga as legendas geradas pelo Studio. Textos já gravados na imagem continuam fazendo parte do vídeo.'
     },
     facecam:{
