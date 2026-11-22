@@ -3,14 +3,14 @@ import {useCallback,useEffect,useState} from 'react';
 type Project={id:string;title:string;media:string};
 type Clip={id:string;project:string;title:string;state:string;score:number;rationale:string;start:number;end:number};
 type Job={kind:string;entity:string;state:string;error:string|null};
-type Verdict={geral:number; dimensoes:Record<string,number>; resumo:string; sugestao:string; personas:{perfil:string;motivo:string}[]; erro?:string};
+type Verdict={motor?:string;geral:number; dimensoes:Record<string,number>; resumo:string; sugestao:string; personas:{perfil:string;motivo:string}[]; erro?:string};
 function Audience({v,pending}:{v?:Verdict;pending:string}){
   if(!v || v.erro) return <p><small>Público simulado · {v?.erro||pending}</small></p>;
   const color=v.geral<40?'#ba3434':v.geral<75?'#ba740b':'#208456';
   return <details style={{padding:12,background:'#f7f7fb',borderRadius:12}}><summary style={{cursor:'pointer'}}>
     <span style={{display:'inline-grid',placeItems:'center',borderRadius:'50%',width:58,height:58,verticalAlign:'middle',background:`conic-gradient(${color} ${v.geral}%,#dedee6 0)`}}>
       <strong style={{display:'grid',placeItems:'center',background:'white',borderRadius:'50%',width:46,height:46}}>{v.geral}</strong>
-    </span> Público simulado · {v.geral}/100</summary><p>{v.resumo}</p>
+    </span> {v.motor || "Ollama"} · Público simulado · {v.geral}/100</summary><p>{v.resumo}</p>
     {Object.entries(v.dimensoes).map(([name,n])=><p key={name}>{name} · {n}/100 <meter min={0} max={100} value={n}/></p>)}
     <p><strong>Ajuste sugerido</strong> {v.sugestao}</p>
     {v.personas.map(person=><p key={person.perfil}><strong>{person.perfil}</strong> · {person.motivo}</p>)}
