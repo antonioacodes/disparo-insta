@@ -11,6 +11,7 @@ import uuid
 import urllib.request
 from pathlib import Path
 
+from studio.delete_project import delete_project
 from studio.cache import maintain, remove_preview, RETENTION
 
 ROOT = Path("storage").resolve()
@@ -48,6 +49,9 @@ def project(media, title, preset='{}'):
         raise ValueError("Arquivo de origem inválido")
     key = uuid.uuid4().hex
     db.execute("BEGIN IMMEDIATE")
+    if not source.is_file():
+        db.rollback()
+        raise ValueError("Original excluído")
     db.execute("INSERT INTO projects(id,media,title) VALUES (?,?,?)", (key, media, title))
     db.execute("INSERT INTO presets VALUES (?,?)",(key,json.dumps(settings)))
     enqueue("analyze", key)
@@ -277,7 +281,7 @@ def audience_loop(clip_id=None):
                 time.sleep(30)
             # Yield to other eligible clips after a failed assessment.
             verdict={"erro":"Avaliação indisponível. Confira o modelo do público no worker."}
-        conn.execute("INSERT OR REPLACE INTO audience VALUES(?,?,?)",(row["id"],json.dumps(verdict,ensure_ascii=False),model))
+        conn.execute("INSERT OR REPLACE INTO audience SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM clips WHERE id=?)",(row["id"],json.dumps(verdict,ensure_ascii=False),model,row["id"]))
 
         if clip_id:
             if "erro" in verdict:
@@ -297,13 +301,16 @@ def worker():
         threading.Thread(target=maintain,args=(WORK,),daemon=True).start()
         threading.Thread(target=audience_loop,daemon=True).start()
         while True:
-            job = db.execute("SELECT * FROM jobs WHERE state='queued' ORDER BY id LIMIT 1").fetchone()
+            job = db.execute("SELECT * FROM jobs WHERE state='queued' ORDER BY (kind='purge') DESC,id LIMIT 1").fetchone()
             if job is None:
                 time.sleep(1)
                 continue
-            db.execute("UPDATE jobs SET state='running',attempts=attempts+1 WHERE id=?", (job["id"],))
+            if not db.execute("UPDATE jobs SET state='running',attempts=attempts+1 WHERE id=? AND state='queued'", (job["id"],)).rowcount:
+                continue
             try:
-                if job["kind"] == "analyze":
+                if job["kind"] == "purge":
+                    delete_project(db, WORK, job["entity"])
+                elif job["kind"] == "analyze":
                     analyze(job["entity"])
                 else:
                     render(job["entity"], job["kind"]=="final")
@@ -314,10 +321,12 @@ def worker():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=["work","create","list","approve","reject","revise","captions","audience"])
+    parser.add_argument("action", choices=["work","create","list","approve","reject","revise","captions","audience","delete-project"])
     parser.add_argument("args", nargs="*")
     opts = parser.parse_args()
-    if opts.action == "audience":
+    if opts.action == "delete-project":
+        delete_project(db,WORK,opts.args[0])
+    elif opts.action == "audience":
         audience_loop(opts.args[0] if opts.args else None)
     elif opts.action == "work":
         worker()

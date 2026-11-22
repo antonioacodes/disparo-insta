@@ -23,3 +23,10 @@ export async function POST(request: Request) {
   await fs.writeFile(path.join(root, `${id}.json`), JSON.stringify(project, null, 2));
   return NextResponse.json({ ok: true, project }, { status: 201 });
 }
+
+export async function DELETE(request:Request) {
+  const id = new URL(request.url).searchParams.get('id') || '';
+  if (!/^project-\d+$/.test(id)) return NextResponse.json({error:'Projeto inválido.'},{status:400});
+  await fs.rm(path.join(root,id+'.json'),{force:true});
+  return NextResponse.json({ok:true});
+}

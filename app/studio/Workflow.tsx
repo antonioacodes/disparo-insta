@@ -18,7 +18,25 @@ function Audience({v,pending}:{v?:Verdict;pending:string}){
 }
 type Brief={id:string;title:string;brief?:string;language?:string;stage:string};
 type Info={width?:number;height?:number;fps?:number;format?:string;codec?:string;language?:string};
-export default function Workflow({briefs}:{briefs:Brief[]}){
+export default function Workflow({briefs,reload}:{briefs:Brief[];reload:()=>Promise<void>}){
+  const deleteDialog=useRef<HTMLDialogElement>(null);
+  const [target,setTarget]=useState<{id:string;title:string}|null>(null);
+  function deleteButton(project:{id:string;title:string}){
+    return <button className="btn secondary" disabled={busy} onClick={()=>{setError('');setTarget(project);deleteDialog.current?.showModal()}}>Excluir projeto</button>;
+  }
+  async function confirmDeletion(){
+    if(!target)return;
+    setBusy(true);setError('');
+    try{
+      const response=target.id.startsWith('project-')
+        ? await fetch('/api/studio/projects?id='+encodeURIComponent(target.id),{method:'DELETE'})
+        : await fetch('/api/studio/workflow',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete-project',id:target.id})});
+      if(!response.ok)throw Error('Falha ao excluir. Tente novamente.');
+      await Promise.all([refresh(),reload()]);
+      const media=await fetch('/api/studio/media',{cache:'no-store'}).then(r=>r.json());
+      setFiles(media.media||[]);select('');deleteDialog.current?.close();
+    }catch(e){setError(e instanceof Error?e.message:'Falha ao excluir.');}finally{setBusy(false);}
+  }
   const dialog=useRef<HTMLDialogElement>(null);
   const [rejectId,setRejectId]=useState('');
   const [deletePreview,setDeletePreview]=useState(true);
@@ -68,13 +86,15 @@ export default function Workflow({briefs}:{briefs:Brief[]}){
       return <button type="button" className="card" key={p.id} aria-pressed={selected===p.id} onClick={()=>select(p.id)} style={{textAlign:'left',borderColor:selected===p.id?'#6648cf':undefined}}>
         <strong>{p.title||source?.originalName}</strong><p>{roots.size} cortes · {approved.size} aprovados · {rejected.size} com rejeição</p><small>Transcrição em português · Original {source?(source.bytes/1048576).toFixed(1)+' MB':'indisponível'}</small></button>
     })}{briefs.map(b=><button type="button" className="card" key={b.id} aria-pressed={selected===b.id} onClick={()=>select(b.id)}><strong>{b.title}</strong><p>Briefing registrado</p></button>)}</div><h2>Produção e revisão</h2>{!selected&&<p>Selecione um projeto acima para revisar os cortes.</p>}
+    <dialog ref={deleteDialog} className="card" aria-labelledby="purge-title"><h3 id="purge-title">Excluir {target?.title}?</h3><p>O projeto, seus cortes, versões, avaliações e exportações serão apagados definitivamente. O vídeo original será excluído se nenhum outro projeto o usar.</p><p>Se houver um corte em processamento, a limpeza ocorrerá ao terminar essa tarefa.</p><button className="btn secondary" disabled={busy} onClick={()=>deleteDialog.current?.close()}>Cancelar</button> <button className="btn" style={{background:'#ae3333'}} disabled={busy} onClick={confirmDeletion}>Excluir definitivamente</button>{error&&<p role="alert">{error}</p>}</dialog>
     <dialog ref={dialog} aria-labelledby="reject-heading" className="card"><h3 id="reject-heading">Rejeitar esta versão?</h3><p>{data.clips.find(c=>c.id===rejectId)?.title}</p><label><input type="checkbox" checked={deletePreview} onChange={e=>setDeletePreview(e.target.checked)}/> Excluir o vídeo desta prévia da VPS</label><p>O original e as outras versões continuam disponíveis.</p><button className="btn secondary" disabled={busy} onClick={()=>dialog.current?.close()}>Cancelar</button> <button className="btn" disabled={busy} onClick={()=>act('reject',rejectId)}>Confirmar rejeição</button>{error&&<p role="alert">{error}</p>}</dialog>
-    {briefs.filter(b=>b.id===selected).map(b=><article className="card" key={b.id}><h3>{b.title}</h3><p>{b.brief}</p>{b.language&&<p>Idioma do projeto · {b.language}</p>}</article>)}
+    {briefs.filter(b=>b.id===selected).map(b=><article className="card" key={b.id}><h3>{b.title}</h3>{deleteButton(b)}<p>{b.brief}</p>{b.language&&<p>Idioma do projeto · {b.language}</p>}</article>)}
     {error&&<p role="alert">{error}</p>}
     {files.filter(f=>!data.projects.some(p=>p.media===f.id)).map(f=><p key={f.id}>{f.originalName} <a className="btn secondary" href={'/studio/reaproveitar?media='+encodeURIComponent(f.id)}>Configurar cortes</a></p>)}
     {data.projects.filter(p=>p.id===selected).map(p=><article className="card" key={p.id}><h3>{p.title}</h3><p>{files.find(f=>f.id===p.media)?.originalName||p.media}</p>
       {(()=>{const m=data.info?.[p.id];return <p>{[m?.width&&m.height&&`${m.width} × ${m.height}`,m?.format && (p.media.split('.').pop()?.toUpperCase() || m.format),m?.codec,m?.fps&&`${m.fps} FPS`,m?.language&&m.language!=='und'?'Idioma do áudio · '+m.language:'Idioma do áudio não informado','Transcrição · Português'].filter(Boolean).join(' · ')}</p>})()}
-      {data.jobs.filter(j=>j.entity===p.id).filter(j=>j.state!=='done').map(j=><p key={j.entity+j.state}>{j.error||(({running:'Processando',queued:'Na fila'} as Record<string,string>)[j.state]||j.state)}</p>)}
+      {deleteButton(p)}
+      {data.jobs.filter(j=>j.entity===p.id).filter(j=>j.state!=='done').map(j=><p key={j.entity+j.state}>{j.error||(j.kind==='purge'?'Exclusão solicitada':null)||(({running:'Processando',queued:'Na fila'} as Record<string,string>)[j.state]||j.state)}</p>)}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,320px),1fr))',gap:16}}>{data.clips.filter(c=>c.project===p.id&&!parents.has(c.id)).map(original=><article key={original.id} style={{padding:18,border:'1px solid #dedeea',borderRadius:18,background:'#fff',boxShadow:'0 4px 18px #2824430d'}}>
       {data.clips.filter(c=>root(c.id)===original.id).map((c,index)=><section key={c.id}><small style={{fontWeight:700,color:'#5737aa'}}>{stage(c)} · Versão {index+1}</small><h3>{c.title}</h3><p>{Math.round(c.start)}–{Math.round(c.end)} s · Sugestão de revisão · {c.score}/100 · {c.rationale}</p>
         <Audience v={data.audience?.[c.id]} pending={c.state==='detected'?'Aguardando prévia':data.audienceEnabled?'Aguardando avaliação':'Modelo de público não configurado'}/>

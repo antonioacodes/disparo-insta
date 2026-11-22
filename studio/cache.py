@@ -39,8 +39,8 @@ def maintain(work):
                     WHERE state!='detected' AND id NOT IN (SELECT clip FROM preview_cache)"""):
                 path = work / project / (clip + "-preview.mp4")
                 deadline = path.stat().st_mtime + RETENTION if path.is_file() else 0
-                conn.execute("INSERT OR IGNORE INTO preview_cache VALUES(?,?,?)",
-                             (clip, deadline, int(not deadline)))
+                conn.execute("INSERT OR IGNORE INTO preview_cache SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM clips WHERE id=?)",
+                             (clip, deadline, int(not deadline),clip))
             for project, clip in conn.execute("""SELECT c.project,c.id FROM clips c JOIN preview_cache p
                     ON c.id=p.clip WHERE p.removed=0 AND p.expires<=?""", (time.time(),)):
                 remove_preview(work, project, clip)
@@ -53,7 +53,7 @@ def maintain(work):
                     except (OSError, subprocess.SubprocessError, ValueError):
                         logging.exception("Falha ao ler metadados de %s", media)
                         continue
-                    conn.execute("INSERT OR REPLACE INTO media_info VALUES(?,?)", (project,json.dumps(details)))
+                    conn.execute("INSERT OR REPLACE INTO media_info SELECT ?,? WHERE EXISTS(SELECT 1 FROM projects WHERE id=?)", (project,json.dumps(details),project))
         except (OSError, sqlite3.Error):
             logging.exception("Falha na manutenção das prévias")
         time.sleep(60)

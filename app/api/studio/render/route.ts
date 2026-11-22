@@ -26,5 +26,5 @@ export async function POST(request:Request){
  const start=approved[0].start;
  const duration=approved[approved.length-1].end-start;
  const filter='scale='+dimensions.join(':')+':force_original_aspect_ratio=increase,crop='+dimensions.join(':')+',ass='+ass;
- try{await run('ffmpeg',['-y','-ss',String(start),'-i',input,'-t',String(duration),'-vf',filter,'-map','0:v:0','-map','0:a:0?','-c:a','aac','-c:v','libx264','-pix_fmt','yuv420p','-movflags','+faststart',output],{timeout:60*60*1000});return NextResponse.json({ok:true,output:path.relative(process.cwd(),output),cuts:approved.length,style,format});}catch(error){return NextResponse.json({ok:false,error:'FFmpeg falhou.',details:error instanceof Error?error.message:String(error)},{status:503});}
+ try{await run('ffmpeg',['-y','-ss',String(start),'-i',input,'-t',String(duration),'-vf',filter,'-map','0:v:0','-map','0:a:0?','-c:a','aac','-c:v','libx264','-pix_fmt','yuv420p','-movflags','+faststart',output],{timeout:60*60*1000});return NextResponse.json({ok:true,output:path.relative(process.cwd(),output),cuts:approved.length,style,format});}catch(error){await fs.rm(output,{force:true});return NextResponse.json({ok:false,error:'FFmpeg falhou.',details:error instanceof Error?error.message:String(error)},{status:503});}finally{await fs.rm(ass,{force:true});}
 }
