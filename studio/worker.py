@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY, media TEXT NOT NULL, ti
 CREATE TABLE IF NOT EXISTS clips(id TEXT PRIMARY KEY, project TEXT REFERENCES projects(id), start REAL, end REAL, title TEXT, score INTEGER, rationale TEXT, state TEXT);
 CREATE TABLE IF NOT EXISTS jobs(id INTEGER PRIMARY KEY, kind TEXT, entity TEXT, state TEXT DEFAULT 'queued', attempts INTEGER DEFAULT 0, error TEXT, UNIQUE(kind,entity));
 CREATE TABLE IF NOT EXISTS revisions(id TEXT PRIMARY KEY REFERENCES clips(id), parent TEXT NOT NULL REFERENCES clips(id), created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS caption_edits(clip TEXT REFERENCES clips(id), segment INTEGER, text TEXT, PRIMARY KEY(clip,segment));
 """)
 
 def enqueue(kind, entity):
@@ -112,7 +113,7 @@ def render(cid, final):
         ms = round(max(0,t)*1000)
         return f"{ms//3600000:02}:{ms//60000%60:02}:{ms//1000%60:02},{ms%1000:03}"
     blocks = []
-    for seg in json.loads(Path(row["transcript"]).read_text())["segments"]:
+    for seg in captions(cid):
         a,b = max(row["start"],seg["start"]),min(row["end"],seg["end"])
         if b>a:
             blocks.append(f"{len(blocks)+1}\n{stamp(a-row['start'])} --> {stamp(b-row['start'])}\n{seg['text'].strip()}\n")
@@ -120,7 +121,11 @@ def render(cid, final):
     w,h = (1080,1920) if final else (360,640)
     out = folder / (cid+("-final.mp4" if final else "-preview.mp4"))
     tmp = out.with_suffix(".partial.mp4")
-    command(["ffmpeg","-loglevel","error","-y","-ss",str(row["start"]),"-i",str(ROOT/"media"/row["media"]),"-t",str(row["end"]-row["start"]),"-vf",f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},subtitles={subtitle}","-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-movflags","+faststart",str(tmp)])
+    crop = f"crop={w}:{h}"
+    if os.getenv("STUDIO_FRAMING") == "mouth_motion":
+        from studio.framing import crop_x
+        crop += ":x=" + crop_x(ROOT/"media"/row["media"], row["start"], row["end"])
+    command(["ffmpeg","-loglevel","error","-y","-ss",str(row["start"]),"-i",str(ROOT/"media"/row["media"]),"-t",str(row["end"]-row["start"]),"-vf",f"scale={w}:{h}:force_original_aspect_ratio=increase,{crop},subtitles={subtitle}","-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-movflags","+faststart",str(tmp)])
     tmp.replace(out)
     db.execute("UPDATE clips SET state=? WHERE id=?",("rendered" if final else "pending_review",cid))
 
@@ -134,7 +139,12 @@ def review(cid, approve):
         enqueue("final",cid)
     db.commit()
 
-def revise(cid, title, start, end):
+def captions(cid):
+    row = db.execute("SELECT c.start,c.end,p.transcript FROM clips c JOIN projects p ON p.id=c.project WHERE c.id=?", (cid,)).fetchone()
+    edits = dict(db.execute("SELECT segment,text FROM caption_edits WHERE clip=?", (cid,)))
+    return [dict(id=i,start=s["start"],end=s["end"],text=edits.get(i,s["text"])) for i,s in enumerate(json.loads(Path(row["transcript"]).read_text())["segments"]) if s["end"]>row["start"] and s["start"]<row["end"]]
+
+def revise(cid, title, start, end, corrections="{}"):
     start, end = float(start), float(end)
     db.execute("BEGIN IMMEDIATE")
     row = db.execute("SELECT c.*, p.duration FROM clips c JOIN projects p ON p.id=c.project WHERE c.id=?", (cid,)).fetchone()
@@ -144,6 +154,11 @@ def revise(cid, title, start, end):
     new_id = project_id + "-" + str(uuid.uuid4().int)
     db.execute("INSERT INTO clips VALUES(?,?,?,?,?,?,?,?)", (new_id,project_id,start,end,title,row["score"],"Revisão manual","detected"))
     db.execute("INSERT INTO revisions(id,parent) VALUES(?,?)",(new_id,cid))
+    db.execute("INSERT INTO caption_edits SELECT ?,segment,text FROM caption_edits WHERE clip=?", (new_id,cid))
+    for index,text in json.loads(corrections).items():
+        if not index.isdecimal() or not isinstance(text,str) or len(text)>1000:
+            raise ValueError("Correção inválida")
+        db.execute("INSERT OR REPLACE INTO caption_edits VALUES(?,?,?)",(new_id,int(index)," ".join(text.split())))
     enqueue("preview",new_id)
     db.commit()
     return new_id
@@ -171,13 +186,15 @@ def worker():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=["work","create","list","approve","reject","revise"])
+    parser.add_argument("action", choices=["work","create","list","approve","reject","revise","captions"])
     parser.add_argument("args", nargs="*")
     opts = parser.parse_args()
     if opts.action == "work":
         worker()
     elif opts.action == "create":
         print(project(*opts.args))
+    elif opts.action == "captions":
+        print(json.dumps(captions(*opts.args)))
     elif opts.action == "revise":
         print(revise(*opts.args))
     elif opts.action == "list":
