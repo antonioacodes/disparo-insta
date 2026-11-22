@@ -48,13 +48,8 @@ export default function Workflow(){
       return <button type="button" className="card" key={p.id} aria-pressed={selected===p.id} onClick={()=>select(p.id)} style={{textAlign:'left',borderColor:selected===p.id?'#6648cf':undefined}}>
         <strong>{source?.originalName||p.title}</strong><p>{roots.size} cortes · {approved.size} aprovados · {rejected.size} com rejeição</p><small>Transcrição em português · Original {source?(source.bytes/1048576).toFixed(1)+' MB':'indisponível'}</small></button>
     })}</div><h2>Produção e revisão</h2>{!selected&&<p>Selecione um projeto acima para revisar os cortes.</p>}
-    <details><summary>Padrão para novos projetos</summary>{([
-      ['captions','Legendas',[['generate','Gerar legendas'],['preserve','Preservar as existentes'],['auto','Detectar texto no vídeo (OCR)']]],
-      ['facecam','Facecam',[['off','Desativada'],['always','Durante todo o corte'],['peaks','Nos picos de volume']]],
-      ['font','Fonte',[['DejaVu Sans','Sem serifa'],['DejaVu Serif','Serifada'],['Liberation Mono','Monoespaçada']]],
-      ['animation','Animação',[['off','Sem animação'],['fade','Entrada e saída suave']]]
-    ] as const).map(([key,label,choices])=><label key={key} style={{display:'block'}}>{label} <select value={preset[key]} onChange={e=>setPreset({...preset,[key]:e.target.value})}>{choices.map(([value,name])=><option value={value} key={value}>{name}</option>)}</select></label>)}<p style={{fontFamily:preset.font+({ 'DejaVu Serif':',serif','Liberation Mono':',monospace'}[preset.font as 'DejaVu Serif'|'Liberation Mono']||',sans-serif')}}>Prévia da legenda do projeto</p></details>{error&&<p role="alert">{error}</p>}
-    {files.filter(f=>!data.projects.some(p=>p.media===f.id)).map(f=><p key={f.id}>{f.originalName} <button disabled={busy} onClick={()=>act('create',f.id,f.originalName)}>Gerar sugestões</button></p>)}
+    {error&&<p role="alert">{error}</p>}
+    {files.filter(f=>!data.projects.some(p=>p.media===f.id)).map(f=><p key={f.id}>{f.originalName} <a className="btn secondary" href={'/studio/reaproveitar?media='+encodeURIComponent(f.id)}>Configurar cortes</a></p>)}
     {data.projects.filter(p=>p.id===selected).map(p=><article className="card" key={p.id}><h3>{p.title}</h3>
       {data.jobs.filter(j=>j.entity===p.id).filter(j=>j.state!=='done').map(j=><p key={j.entity+j.state}>{j.error||(({running:'Processando',queued:'Na fila'} as Record<string,string>)[j.state]||j.state)}</p>)}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,320px),1fr))',gap:16}}>{data.clips.filter(c=>c.project===p.id&&!parents.has(c.id)).map(original=><article key={original.id} style={{padding:18,border:'1px solid #dedeea',borderRadius:18,background:'#fff',boxShadow:'0 4px 18px #2824430d'}}>
