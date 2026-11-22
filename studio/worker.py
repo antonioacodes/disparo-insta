@@ -33,7 +33,7 @@ def command(args):
 
 def project(media, title, preset='{}'):
     settings = json.loads(preset)
-    allowed = {'captions':['generate','preserve','auto'],'facecam':['off','always','peaks'],'font':['DejaVu Sans','DejaVu Serif','Liberation Mono'],'animation':['off','fade']}
+    allowed = {'captions':['generate','preserve','auto'],'facecam':['off','always','peaks'],'font':["DejaVu Sans","Montserrat","Anton","Bebas Neue","Oswald","Poppins","Roboto Condensed","Barlow Condensed","Archivo Black","DM Sans","Space Grotesk","DejaVu Serif","Liberation Mono"],'animation':['off','fade']}
     if not isinstance(settings,dict) or any(k not in allowed or v not in allowed[k] for k,v in settings.items()):
         raise ValueError('Padrão inválido')
     source = ROOT / "media" / media
