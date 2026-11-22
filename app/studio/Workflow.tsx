@@ -7,8 +7,10 @@ export default function Workflow(){
   const [data,setData]=useState<{projects:Project[];clips:Clip[];jobs:Job[];revisions?:{id:string;parent:string}[]}>({projects:[],clips:[],jobs:[]});
   const parents=new Map((data.revisions||[]).map(r=>[r.id,r.parent] as const));
   function root(id:string){while(parents.has(id)) id=parents.get(id)!;return id;}
+  const [selected,select]=useState('');
+  const [preset,setPreset]=useState({captions:'generate',facecam:'off',font:'DejaVu Sans',animation:'off'});
   const [captions,setCaptions]=useState<Record<string,{id:number;text:string;start:number}[]>>({});
-  const [files,setFiles]=useState<{id:string;originalName:string}[]>([]);
+  const [files,setFiles]=useState<{id:string;originalName:string;bytes:number}[]>([]);
   const [error,setError]=useState('');
   const [busy,setBusy]=useState(false);
   const refresh=useCallback(async()=>{
@@ -26,7 +28,7 @@ export default function Workflow(){
   async function act(action:string,id:string,title='',start?:number,end?:number,corrections?:Record<string,string>){
     setBusy(true);setError('');
     try{
-      const r=await fetch('/api/studio/workflow',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,id,title,start,end,corrections})});
+      const r=await fetch('/api/studio/workflow',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,id,title,start,end,corrections,preset})});
       if(!r.ok) throw Error((await r.json()).error);
       if(action==='captions'){const rows=await r.json();setCaptions(previous=>({...previous,[id]:rows}));}else await refresh();
     }catch(e){setError(e instanceof Error?e.message:'Falha ao salvar.');}finally{setBusy(false);}
@@ -37,9 +39,23 @@ export default function Workflow(){
     if(c.state==='detected') return job?.state==='running'?'Gerando prévia':'Prévia na fila';
     return ({pending_review:'Pronto para assistir',approved:'Exportando',rendered:'Vídeo final pronto',rejected:'Rejeitado'} as Record<string,string>)[c.state]||c.state;
   }
-  return <section className="section"><h2>Produção e revisão</h2>{error&&<p role="alert">{error}</p>}
+  return <section className="section"><h2>Projetos em andamento</h2><div className="grid">{data.projects.map(p=>{
+      const clips=data.clips.filter(c=>c.project===p.id);
+      const roots=new Set(clips.map(c=>root(c.id)));
+      const approved=new Set(clips.filter(c=>['approved','rendered'].includes(c.state)).map(c=>root(c.id)));
+      const rejected=new Set(clips.filter(c=>c.state==='rejected'&&!approved.has(root(c.id))).map(c=>root(c.id)));
+      const source=files.find(f=>f.id===p.media);
+      return <button type="button" className="card" key={p.id} aria-pressed={selected===p.id} onClick={()=>select(p.id)} style={{textAlign:'left',borderColor:selected===p.id?'#6648cf':undefined}}>
+        <strong>{source?.originalName||p.title}</strong><p>{roots.size} cortes · {approved.size} aprovados · {rejected.size} com rejeição</p><small>Transcrição em português · Original {source?(source.bytes/1048576).toFixed(1)+' MB':'indisponível'}</small></button>
+    })}</div><h2>Produção e revisão</h2>{!selected&&<p>Selecione um projeto acima para revisar os cortes.</p>}
+    <details><summary>Padrão para novos projetos</summary>{([
+      ['captions','Legendas',[['generate','Gerar legendas'],['preserve','Preservar as existentes'],['auto','Detectar texto no vídeo (OCR)']]],
+      ['facecam','Facecam',[['off','Desativada'],['always','Durante todo o corte'],['peaks','Nos picos de volume']]],
+      ['font','Fonte',[['DejaVu Sans','Sem serifa'],['DejaVu Serif','Serifada'],['Liberation Mono','Monoespaçada']]],
+      ['animation','Animação',[['off','Sem animação'],['fade','Entrada e saída suave']]]
+    ] as const).map(([key,label,choices])=><label key={key} style={{display:'block'}}>{label} <select value={preset[key]} onChange={e=>setPreset({...preset,[key]:e.target.value})}>{choices.map(([value,name])=><option value={value} key={value}>{name}</option>)}</select></label>)}<p style={{fontFamily:preset.font+({ 'DejaVu Serif':',serif','Liberation Mono':',monospace'}[preset.font as 'DejaVu Serif'|'Liberation Mono']||',sans-serif')}}>Prévia da legenda do projeto</p></details>{error&&<p role="alert">{error}</p>}
     {files.filter(f=>!data.projects.some(p=>p.media===f.id)).map(f=><p key={f.id}>{f.originalName} <button disabled={busy} onClick={()=>act('create',f.id,f.originalName)}>Gerar sugestões</button></p>)}
-    {data.projects.map(p=><article className="card" key={p.id}><h3>{p.title}</h3>
+    {data.projects.filter(p=>p.id===selected).map(p=><article className="card" key={p.id}><h3>{p.title}</h3>
       {data.jobs.filter(j=>j.entity===p.id).filter(j=>j.state!=='done').map(j=><p key={j.entity+j.state}>{j.error||(({running:'Processando',queued:'Na fila'} as Record<string,string>)[j.state]||j.state)}</p>)}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,320px),1fr))',gap:16}}>{data.clips.filter(c=>c.project===p.id&&!parents.has(c.id)).map(original=><article key={original.id} style={{padding:18,border:'1px solid #dedeea',borderRadius:18,background:'#fff',boxShadow:'0 4px 18px #2824430d'}}>
       {data.clips.filter(c=>root(c.id)===original.id).map((c,index)=><section key={c.id}><small style={{fontWeight:700,color:'#5737aa'}}>{stage(c)} · Versão {index+1}</small><h3>{c.title}</h3><p>{Math.round(c.start)}–{Math.round(c.end)} s · Sugestão de revisão · {c.score}/100 · {c.rationale}</p>
