@@ -16,7 +16,10 @@ export async function GET() {
 
 export async function POST(request:Request) {
   try {
-    const {action,id,title} = await request.json();
+    const {action,id,title,start,end} = await request.json();
+    if(action==='revise' && typeof id==='string' && /^[a-f0-9]{32}-\d+$/.test(id) && typeof title==='string' && Number.isFinite(start) && Number.isFinite(end)){
+      return NextResponse.json({version:await worker(['revise',id,title.slice(0,200),String(start),String(end)])},{status:201});
+    }
     if (action==='create' && typeof id==='string' && /^[\w.-]+$/.test(id) && typeof title==='string' && title.trim()) {
       return NextResponse.json({project:await worker(['create',id,title.trim().slice(0,200)])},{status:201});
     }
