@@ -161,6 +161,11 @@ def analyze(key):
         enqueue("preview",cid)
     db.commit()
 
+def ass_time_ms(timestamp):
+    hours, minutes, seconds = timestamp.strip().split(":")
+    return (int(hours)*3600 + int(minutes)*60)*1000 + round(float(seconds)*1000)
+
+
 def render(cid, final):
     kind = "final" if final else "preview"
     progress(kind,cid,"Preparando o enquadramento")
@@ -223,7 +228,10 @@ def render(cid, final):
         for i,line in enumerate(lines):
             if line.startswith("Dialogue:"):
                 fields = line.split(",",9)
-                fields[-1] = r"{\fad(120,100)}"+fields[-1]
+                duration_ms = ass_time_ms(fields[2]) - ass_time_ms(fields[1])
+                if duration_ms >= 500:
+                    fade_ms = min(100, duration_ms // 12)
+                    fields[-1] = r"{\fad(%d,%d)}" % (fade_ms, fade_ms) + fields[-1]
                 lines[i] = ",".join(fields)
         ass.write_text("\n".join(lines))
         subtitle = ass
