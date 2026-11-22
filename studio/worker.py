@@ -22,6 +22,7 @@ db.row_factory = sqlite3.Row
 db.executescript("""
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
+CREATE TABLE IF NOT EXISTS link_sources(project TEXT PRIMARY KEY,url TEXT);
 CREATE TABLE IF NOT EXISTS preview_cache(clip TEXT PRIMARY KEY,expires REAL,removed INTEGER);
 CREATE TABLE IF NOT EXISTS media_info(project TEXT PRIMARY KEY,details TEXT);
 CREATE TABLE IF NOT EXISTS audience(clip TEXT PRIMARY KEY REFERENCES clips(id), result TEXT, model TEXT);
@@ -39,22 +40,28 @@ def enqueue(kind, entity):
 def command(args):
     return subprocess.run(args, check=True, capture_output=True, text=True, timeout=7200).stdout
 
-def project(media, title, preset='{}'):
+def project(media, title, preset='{}', remote=False):
     settings = json.loads(preset)
-    allowed = {'captions':['generate','preserve','auto'],'facecam':['off','always','peaks'],'font':["DejaVu Sans","Montserrat","Anton","Bebas Neue","Oswald","Poppins","Roboto Condensed","Barlow Condensed","Archivo Black","DM Sans","Space Grotesk","DejaVu Serif","Liberation Mono"],'animation':['off','fade']}
+    allowed = {'captions':['generate','preserve','auto','off'],'facecam':['off','always','peaks'],'font':["DejaVu Sans","Montserrat","Anton","Bebas Neue","Oswald","Poppins","Roboto Condensed","Barlow Condensed","Archivo Black","DM Sans","Space Grotesk","DejaVu Serif","Liberation Mono"],'animation':['off','fade']}
     if not isinstance(settings,dict) or any(k not in allowed or v not in allowed[k] for k,v in settings.items()):
         raise ValueError('Padrão inválido')
-    source = ROOT / "media" / media
-    if Path(media).name != media or not source.is_file() or source.is_symlink():
-        raise ValueError("Arquivo de origem inválido")
     key = uuid.uuid4().hex
+    if remote:
+        from studio.link_source import source_url
+        _, url = source_url(media)
+        media = key + "-original.mkv"
+    source = ROOT / "media" / media
+    if not remote and (Path(media).name != media or not source.is_file() or source.is_symlink()):
+        raise ValueError("Arquivo de origem inválido")
     db.execute("BEGIN IMMEDIATE")
-    if not source.is_file():
+    if not remote and not source.is_file():
         db.rollback()
         raise ValueError("Original excluído")
     db.execute("INSERT INTO projects(id,media,title) VALUES (?,?,?)", (key, media, title))
     db.execute("INSERT INTO presets VALUES (?,?)",(key,json.dumps(settings)))
-    enqueue("analyze", key)
+    if remote:
+        db.execute("INSERT INTO link_sources VALUES(?,?)",(key,url))
+    enqueue("import" if remote else "analyze", key)
     db.commit()
     return key
 
@@ -129,12 +136,6 @@ def render(cid, final):
     def stamp(t):
         ms = round(max(0,t)*1000)
         return f"{ms//3600000:02}:{ms//60000%60:02}:{ms//1000%60:02},{ms%1000:03}"
-    blocks = []
-    for seg in captions(cid):
-        a,b = max(row["start"],seg["start"]),min(row["end"],seg["end"])
-        if b>a:
-            blocks.append(f"{len(blocks)+1}\n{stamp(a-row['start'])} --> {stamp(b-row['start'])}\n{seg['text'].strip()}\n")
-    subtitle.write_text("\n".join(blocks))
     w,h = (1080,1920) if final else (360,640)
     out = folder / (cid+("-final.mp4" if final else "-preview.mp4"))
     tmp = out.with_suffix(".partial.mp4")
@@ -145,14 +146,24 @@ def render(cid, final):
             crop += ":x=" + crop_x(ROOT/"media"/row["media"], row["start"], row["end"])
         except (ImportError, AttributeError) as exc:
             print(f"Enquadramento central em {cid}: {exc}", flush=True)
-    from studio.presets import captions_visible, face_region, peaks
+    from studio.presets import missing_caption_spans, face_region, peaks
     source = ROOT/"media"/row["media"]
     record = db.execute("SELECT settings FROM presets WHERE project=?", (row["project"],)).fetchone()
     settings = json.loads(record[0]) if record else {}
     mode = settings.get("captions","generate")
-    burn = mode=="generate" or (mode=="auto" and not captions_visible(source,row["start"],row["end"]))
+    blocks = []
+    if mode in ("generate","auto"):
+        for seg in captions(cid):
+            a,b = max(row["start"],seg["start"]),min(row["end"],seg["end"])
+            if b<=a:
+                continue
+            spans = missing_caption_spans(source,a,b) if mode=="auto" else [(a,b)]
+            for left,right in spans:
+                blocks.append(f"{len(blocks)+1}\n{stamp(left-row['start'])} --> {stamp(right-row['start'])}\n{seg['text'].strip()}\n")
+    subtitle.write_text("\n".join(blocks))
+    burn = bool(blocks)
     base = f"scale={w}:{h}:force_original_aspect_ratio=increase,{crop}"
-    if not burn:
+    if mode in ("auto","preserve"):
         base = f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2"
     filters = "[0:v]"+base+"[base];"
     face = settings.get("facecam","off")
@@ -310,6 +321,21 @@ def worker():
             try:
                 if job["kind"] == "purge":
                     delete_project(db, WORK, job["entity"])
+                elif job["kind"] == "import":
+                    from studio.link_source import download
+                    key = job["entity"]
+                    target = ROOT / "media" / (key+"-original.mkv")
+                    target.parent.mkdir(exist_ok=True)
+                    folder = WORK / key
+                    folder.mkdir(exist_ok=True)
+                    if not target.exists():
+                        url = db.execute("SELECT url FROM link_sources WHERE project=?", (key,)).fetchone()[0]
+                        with tempfile.TemporaryDirectory(dir=folder) as temp:
+                            output = Path(temp)/"import.mkv"
+                            download(url,Path(temp),output)
+                            output.replace(target)
+                    enqueue("analyze",key)
+                    db.execute("DELETE FROM link_sources WHERE project=?", (key,))
                 elif job["kind"] == "analyze":
                     analyze(job["entity"])
                 else:
@@ -321,7 +347,7 @@ def worker():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=["work","create","list","approve","reject","revise","captions","audience","delete-project"])
+    parser.add_argument("action", choices=["work","create","list","approve","reject","revise","captions","audience","delete-project","import"])
     parser.add_argument("args", nargs="*")
     opts = parser.parse_args()
     if opts.action == "delete-project":
@@ -330,6 +356,8 @@ if __name__ == "__main__":
         audience_loop(opts.args[0] if opts.args else None)
     elif opts.action == "work":
         worker()
+    elif opts.action == "import":
+        print(project(*opts.args,remote=True))
     elif opts.action == "create":
         print(project(*opts.args))
     elif opts.action == "captions":

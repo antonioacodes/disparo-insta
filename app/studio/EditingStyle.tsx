@@ -8,7 +8,8 @@ export function EditingStyle({value,onChange}:{value:typeof defaults;onChange:(v
     captions:{
       generate:'Grava a transcrição da fala na imagem com a fonte escolhida. Use em vídeos sem legenda embutida para evitar texto sobreposto.',
       preserve:'Mantém a imagem inteira, incluindo as legendas que já aparecem nela. O corte fica sem uma segunda camada de texto.',
-      auto:'Procura texto na região inferior de quatro quadros de cada corte. Se encontrar indícios de legenda em pelo menos dois, preserva a imagem. Caso contrário, gera legendas. Outros textos na tela também podem ser detectados.'
+      auto:'Durante cada fala, procura texto na parte inferior da imagem a cada meio segundo. Acrescenta legendas nos intervalos sem texto detectado e preserva a imagem inteira.',
+      off:'Desliga as legendas geradas pelo Studio. Textos já gravados na imagem continuam fazendo parte do vídeo.'
     },
     facecam:{
       off:'Usa o enquadramento do corte sem acrescentar uma janela de câmera.',
@@ -21,7 +22,7 @@ export function EditingStyle({value,onChange}:{value:typeof defaults;onChange:(v
     }
   };
   const choices=[
-    ['captions','Legendas',[['generate','Gerar legendas'],['preserve','Preservar originais'],['auto','Detectar no vídeo']]],
+    ['captions','Legendas',[['generate','Gerar legendas'],['preserve','Preservar originais'],['auto','Detectar no vídeo'],['off','Desativado']]],
     ['facecam','Facecam',[['off','Desativada'],['always','Corte inteiro'],['peaks','Picos de volume']]],
     ['animation','Animação de texto',[['off','Estática'],['fade','Entrada suave']]]
   ] as const;

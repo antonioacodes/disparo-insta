@@ -16,7 +16,10 @@ export async function GET() {
 
 export async function POST(request:Request) {
   try {
-    const {action,id,title,start,end,corrections,preset,deletePreview} = await request.json();
+    const {action,id,title,start,end,corrections,preset,deletePreview,url} = await request.json();
+    if(action==='import' && typeof url==='string' && url.startsWith('https://') && url.length<=4096 && typeof title==='string'){
+      return NextResponse.json({project:await worker(['import',url,title.trim().slice(0,200)||'Vídeo por link',JSON.stringify(preset||{})])},{status:202});
+    }
     if(action==='delete-project' && typeof id==='string' && /^[a-f0-9]{32}$/.test(id)){
       await worker(['delete-project',id]);
       return NextResponse.json({ok:true});

@@ -8,15 +8,22 @@ import subprocess
 def run(args, data=None):
     return subprocess.run(args,input=data,stdout=subprocess.PIPE,stderr=subprocess.PIPE,check=True,timeout=180).stdout
 
-def captions_visible(source,start,end):
+def missing_caption_spans(source,start,end):
     if not shutil.which("tesseract"):
         raise ValueError("Detecção automática exige Tesseract. Instale tesseract-ocr ou escolha preservar as legendas.")
-    hits = 0
-    for fraction in (.15,.35,.6,.85):
-        frame = run(["ffmpeg","-loglevel","error","-ss",str(start+(end-start)*fraction),"-i",str(source),"-frames:v","1","-vf","crop=iw:ih*0.55:0:ih*0.45,scale=960:-2","-f","image2pipe","-c:v","png","-"])
+    spans = []
+    left = start
+    while left < end:
+        right = min(end,left+.5)
+        frame = run(["ffmpeg","-loglevel","error","-ss",str((left+right)/2),"-i",str(source),"-frames:v","1","-vf","crop=iw:ih*0.55:0:ih*0.45,scale=960:-2","-f","image2pipe","-c:v","png","-"])
         words = run(["tesseract","stdin","stdout","--psm","6"],frame).decode(errors="replace")
-        hits += len(re.findall(r"[^\W\d_]{2,}",words)) >= 3
-    return hits >= 2
+        if not re.search(r"[^\W\d_]{2,}", words):
+            if spans and spans[-1][1] == left:
+                spans[-1] = (spans[-1][0],right)
+            else:
+                spans.append((left,right))
+        left = right
+    return spans
 
 def face_region(source,start,end):
     import cv2

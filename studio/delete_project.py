@@ -53,7 +53,7 @@ def delete_project(db, work, project):
         for table in ("audience","preview_cache","caption_edits"):
             db.execute(f"DELETE FROM {table} WHERE clip IN {entities}", (project,))
         db.execute(f"DELETE FROM revisions WHERE id IN {entities}", (project,))
-        for table in ("clips","presets","media_info"):
+        for table in ("clips","presets","media_info","link_sources"):
             db.execute(f"DELETE FROM {table} WHERE project=?", (project,))
         db.execute("DELETE FROM projects WHERE id=?", (project,))
         db.commit()
