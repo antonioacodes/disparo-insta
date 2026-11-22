@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   if (!title || !brief) return NextResponse.json({ ok: false, error: 'Título e briefing são obrigatórios.' }, { status: 400 });
   await ensure();
   const id = `project-${Date.now()}`;
-  const project = { id, title, brief, stage: 'briefing', media: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  const project = { id, title, brief, preset:body.preset, mode:body.mode, language:body.language, voice:body.voice, stage: 'briefing', media: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
   await fs.writeFile(path.join(root, `${id}.json`), JSON.stringify(project, null, 2));
   return NextResponse.json({ ok: true, project }, { status: 201 });
 }
