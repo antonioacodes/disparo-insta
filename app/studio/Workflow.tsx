@@ -3,8 +3,21 @@ import {useCallback,useEffect,useState} from 'react';
 type Project={id:string;title:string;media:string};
 type Clip={id:string;project:string;title:string;state:string;score:number;rationale:string;start:number;end:number};
 type Job={kind:string;entity:string;state:string;error:string|null};
+type Verdict={geral:number; dimensoes:Record<string,number>; resumo:string; sugestao:string; personas:{perfil:string;motivo:string}[]; erro?:string};
+function Audience({v,pending}:{v?:Verdict;pending:string}){
+  if(!v || v.erro) return <p><small>Público simulado · {v?.erro||pending}</small></p>;
+  const color=v.geral<40?'#ba3434':v.geral<75?'#ba740b':'#208456';
+  return <details style={{padding:12,background:'#f7f7fb',borderRadius:12}}><summary style={{cursor:'pointer'}}>
+    <span style={{display:'inline-grid',placeItems:'center',borderRadius:'50%',width:58,height:58,verticalAlign:'middle',background:`conic-gradient(${color} ${v.geral}%,#dedee6 0)`}}>
+      <strong style={{display:'grid',placeItems:'center',background:'white',borderRadius:'50%',width:46,height:46}}>{v.geral}</strong>
+    </span> Público simulado · {v.geral}/100</summary><p>{v.resumo}</p>
+    {Object.entries(v.dimensoes).map(([name,n])=><p key={name}>{name} · {n}/100 <meter min={0} max={100} value={n}/></p>)}
+    <p><strong>Ajuste sugerido</strong> {v.sugestao}</p>
+    {v.personas.map(person=><p key={person.perfil}><strong>{person.perfil}</strong> · {person.motivo}</p>)}
+  </details>;
+}
 export default function Workflow(){
-  const [data,setData]=useState<{projects:Project[];clips:Clip[];jobs:Job[];revisions?:{id:string;parent:string}[]}>({projects:[],clips:[],jobs:[]});
+  const [data,setData]=useState<{projects:Project[];clips:Clip[];jobs:Job[];audience?:Record<string,Verdict>;audienceEnabled?:boolean;revisions?:{id:string;parent:string}[]}>({projects:[],clips:[],jobs:[]});
   const parents=new Map((data.revisions||[]).map(r=>[r.id,r.parent] as const));
   function root(id:string){while(parents.has(id)) id=parents.get(id)!;return id;}
   const [selected,select]=useState('');
@@ -54,6 +67,7 @@ export default function Workflow(){
       {data.jobs.filter(j=>j.entity===p.id).filter(j=>j.state!=='done').map(j=><p key={j.entity+j.state}>{j.error||(({running:'Processando',queued:'Na fila'} as Record<string,string>)[j.state]||j.state)}</p>)}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,320px),1fr))',gap:16}}>{data.clips.filter(c=>c.project===p.id&&!parents.has(c.id)).map(original=><article key={original.id} style={{padding:18,border:'1px solid #dedeea',borderRadius:18,background:'#fff',boxShadow:'0 4px 18px #2824430d'}}>
       {data.clips.filter(c=>root(c.id)===original.id).map((c,index)=><section key={c.id}><small style={{fontWeight:700,color:'#5737aa'}}>{stage(c)} · Versão {index+1}</small><h3>{c.title}</h3><p>{Math.round(c.start)}–{Math.round(c.end)} s · Sugestão de revisão · {c.score}/100 · {c.rationale}</p>
+        <Audience v={data.audience?.[c.id]} pending={c.state==='detected'?'Aguardando prévia':data.audienceEnabled?'Aguardando avaliação':'Modelo de público não configurado'}/>
         {c.state==='detected'&&<details><summary>Assistir ao trecho original</summary><video preload="none" controls style={{width:'100%'}} src={'/api/studio/media/'+encodeURIComponent(p.media)+'#t='+c.start+','+c.end}/></details>}
         {data.jobs.filter(j=>j.entity===c.id&&j.state==='failed').map(j=><p role="alert" key={j.kind}>{j.error}</p>)}
         {c.state!=='detected'&&<video preload="none" poster={'/api/studio/workflow/poster?id='+c.id} controls playsInline style={{height:300,width:'100%',objectFit:'contain',background:'#171523',borderRadius:12}} src={'/api/studio/workflow/video?id='+c.id+'&kind='+(c.state==='rendered'?'final':'preview')}/>}
