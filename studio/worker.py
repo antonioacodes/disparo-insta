@@ -17,6 +17,7 @@ db.row_factory = sqlite3.Row
 db.executescript("""
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
+CREATE TABLE IF NOT EXISTS presets(project TEXT PRIMARY KEY, settings TEXT);
 CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY, media TEXT NOT NULL, title TEXT NOT NULL, duration REAL, transcript TEXT);
 CREATE TABLE IF NOT EXISTS clips(id TEXT PRIMARY KEY, project TEXT REFERENCES projects(id), start REAL, end REAL, title TEXT, score INTEGER, rationale TEXT, state TEXT);
 CREATE TABLE IF NOT EXISTS jobs(id INTEGER PRIMARY KEY, kind TEXT, entity TEXT, state TEXT DEFAULT 'queued', attempts INTEGER DEFAULT 0, error TEXT, UNIQUE(kind,entity));
@@ -30,13 +31,18 @@ def enqueue(kind, entity):
 def command(args):
     return subprocess.run(args, check=True, capture_output=True, text=True, timeout=7200).stdout
 
-def project(media, title):
+def project(media, title, preset='{}'):
+    settings = json.loads(preset)
+    allowed = {'captions':['generate','preserve','auto'],'facecam':['off','always','peaks'],'font':['DejaVu Sans','DejaVu Serif','Liberation Mono'],'animation':['off','fade']}
+    if not isinstance(settings,dict) or any(k not in allowed or v not in allowed[k] for k,v in settings.items()):
+        raise ValueError('Padrão inválido')
     source = ROOT / "media" / media
     if Path(media).name != media or not source.is_file() or source.is_symlink():
         raise ValueError("Arquivo de origem inválido")
     key = uuid.uuid4().hex
     db.execute("BEGIN IMMEDIATE")
     db.execute("INSERT INTO projects(id,media,title) VALUES (?,?,?)", (key, media, title))
+    db.execute("INSERT INTO presets VALUES (?,?)",(key,json.dumps(settings)))
     enqueue("analyze", key)
     db.commit()
     return key
@@ -128,7 +134,39 @@ def render(cid, final):
             crop += ":x=" + crop_x(ROOT/"media"/row["media"], row["start"], row["end"])
         except (ImportError, AttributeError) as exc:
             print(f"Enquadramento central em {cid}: {exc}", flush=True)
-    command(["ffmpeg","-loglevel","error","-y","-ss",str(row["start"]),"-i",str(ROOT/"media"/row["media"]),"-t",str(row["end"]-row["start"]),"-vf",f"scale={w}:{h}:force_original_aspect_ratio=increase,{crop},subtitles={subtitle}","-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-movflags","+faststart",str(tmp)])
+    from studio.presets import captions_visible, face_region, peaks
+    source = ROOT/"media"/row["media"]
+    record = db.execute("SELECT settings FROM presets WHERE project=?", (row["project"],)).fetchone()
+    settings = json.loads(record[0]) if record else {}
+    mode = settings.get("captions","generate")
+    burn = mode=="generate" or (mode=="auto" and not captions_visible(source,row["start"],row["end"]))
+    base = f"scale={w}:{h}:force_original_aspect_ratio=increase,{crop}"
+    if not burn:
+        base = f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2"
+    filters = "[0:v]"+base+"[base];"
+    face = settings.get("facecam","off")
+    region = face_region(source,row["start"],row["end"]) if face!="off" else None
+    layer = "base"
+    if region:
+        side,x,y = region
+        enable = peaks(source,row["start"],row["end"]) if face=="peaks" else "1"
+        filters += f"[0:v]crop={side}:{side}:{x}:{y},scale={w//3}:-2[cam];[base][cam]overlay=W-w-12:12:enable='{enable}'[combined];"
+        layer = "combined"
+    font = settings.get("font","DejaVu Sans")
+    if burn and settings.get("animation")=="fade":
+        import re
+        ass = subtitle.with_suffix(".ass")
+        command(["ffmpeg","-loglevel","error","-y","-i",str(subtitle),str(ass)])
+        lines = ass.read_text().splitlines()
+        for i,line in enumerate(lines):
+            if line.startswith("Dialogue:"):
+                fields = line.split(",",9)
+                fields[-1] = r"{\fad(120,100)}"+fields[-1]
+                lines[i] = ",".join(fields)
+        ass.write_text("\n".join(lines))
+        subtitle = ass
+    filters += f"[{layer}]"+(f"subtitles={subtitle}:force_style='FontName={font}'" if burn else "null")+"[out]"
+    command(["ffmpeg","-loglevel","error","-y","-ss",str(row["start"]),"-i",str(ROOT/"media"/row["media"]),"-t",str(row["end"]-row["start"]),"-filter_complex",filters,"-map","[out]","-map","0:a:0?","-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-movflags","+faststart",str(tmp)])
     tmp.replace(out)
     db.execute("UPDATE clips SET state=? WHERE id=?",("rendered" if final else "pending_review",cid))
 
