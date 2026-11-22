@@ -210,6 +210,10 @@ def render(cid, final):
         filters += f"[0:v]crop={cw}:{ch}:{x}:{y},scale={w//3}:-2[cam];[base][cam]overlay=W-w-12:12:enable='{enable}'[combined];"
         layer = "combined"
     font = settings.get("font","DejaVu Sans")
+    if burn:
+        family = command(["fc-match","-f","%{family}",font]).strip()
+        if font.casefold() not in [name.strip().casefold() for name in family.split(",")]:
+            raise ValueError(f"Fonte {font} ausente na VPS. Execute bash studio/install-fonts.sh.")
     if burn and settings.get("animation")=="fade":
         progress(kind,cid,"Preparando a animação das legendas")
         import re
@@ -223,7 +227,7 @@ def render(cid, final):
                 lines[i] = ",".join(fields)
         ass.write_text("\n".join(lines))
         subtitle = ass
-    filters += f"[{layer}]"+(f"subtitles={subtitle}:force_style='FontName={font}'" if burn else "null")+"[out]"
+    filters += f"[{layer}]"+(f"subtitles={subtitle}:force_style='FontName={font},Bold=1,FontSize=14,MarginV=22'" if burn else "null")+"[out]"
     progress(kind,cid,"Gerando o vídeo final" if final else "Gerando a prévia")
     command(["ffmpeg","-loglevel","error","-y","-ss",str(row["start"]),"-i",str(ROOT/"media"/row["media"]),"-t",str(row["end"]-row["start"]),"-filter_complex",filters,"-map","[out]","-map","0:a:0?","-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-movflags","+faststart",str(tmp)])
     tmp.replace(out)

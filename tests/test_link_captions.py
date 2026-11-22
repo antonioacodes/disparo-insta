@@ -21,6 +21,6 @@ class SourceTests(unittest.TestCase):
 
     def test_mixed_captions_within_one_phrase(self):
         with patch("studio.presets.shutil.which",return_value="tesseract"), patch(
-            "studio.presets.run", side_effect=[b"frame", b"Fala", b"frame", b"",
+            "studio.presets.run", side_effect=[b"frame", b"Uma fala", b"frame", b"",
                                                b"frame", b"", b"frame", b"Outra fala"]):
             self.assertEqual(missing_caption_spans("video.mp4", 5, 7), [(5.5, 6.5)])

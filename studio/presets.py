@@ -15,9 +15,9 @@ def missing_caption_spans(source,start,end):
     left = start
     while left < end:
         right = min(end,left+.5)
-        frame = run(["ffmpeg","-loglevel","error","-ss",str((left+right)/2),"-i",str(source),"-frames:v","1","-vf","crop=iw:ih*0.55:0:ih*0.45,scale=960:-2","-f","image2pipe","-c:v","png","-"])
+        frame = run(["ffmpeg","-loglevel","error","-ss",str((left+right)/2),"-i",str(source),"-frames:v","1","-vf","crop=min(iw\\,ih*9/16):ih,crop=iw:ih*0.38:0:ih*0.60,scale=640:-2","-f","image2pipe","-c:v","png","-"])
         words = run(["tesseract","stdin","stdout","--psm","6"],frame).decode(errors="replace")
-        if not re.search(r"[^\W\d_]{2,}", words):
+        if len(re.findall(r"\b[^\W\d_]{2,}\b", words)) < 2:
             if spans and spans[-1][1] == left:
                 spans[-1] = (spans[-1][0],right)
             else:
