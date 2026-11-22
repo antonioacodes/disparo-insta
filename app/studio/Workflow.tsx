@@ -68,7 +68,7 @@ export default function Workflow({briefs,reload}:{briefs:Brief[];reload:()=>Prom
   const dialog=useRef<HTMLDialogElement>(null);
   const [rejectId,setRejectId]=useState('');
   const [deletePreview,setDeletePreview]=useState(true);
-  const [data,setData]=useState<{cache?:Record<string,{expires:number;removed:number}>;info?:Record<string,Info>;projects:Project[];clips:Clip[];jobs:Job[];audience?:Record<string,Verdict>;audienceStatus?:string;revisions?:{id:string;parent:string}[]}>({projects:[],clips:[],jobs:[]});
+  const [data,setData]=useState<{eta?:Record<string,{low:number;high:number}>;cache?:Record<string,{expires:number;removed:number}>;info?:Record<string,Info>;projects:Project[];clips:Clip[];jobs:Job[];audience?:Record<string,Verdict>;audienceStatus?:string;revisions?:{id:string;parent:string}[]}>({projects:[],clips:[],jobs:[]});
   const parents=new Map((data.revisions||[]).map(r=>[r.id,r.parent] as const));
   function root(id:string){while(parents.has(id)) id=parents.get(id)!;return id;}
   const [selected,select]=useState('');
@@ -124,7 +124,7 @@ export default function Workflow({briefs,reload}:{briefs:Brief[];reload:()=>Prom
       {(()=>{const m=data.info?.[p.id];return <p>{[m?.width&&m.height&&`${m.width} × ${m.height}`,m?.format && (p.media.split('.').pop()?.toUpperCase() || m.format),m?.codec,m?.fps&&`${m.fps} FPS`,m?.language&&m.language!=='und'?'Idioma do áudio · '+m.language:'Idioma do áudio não informado','Transcrição · Português'].filter(Boolean).join(' · ')}</p>})()}
       {deleteButton(p)}
       {data.jobs.filter(j=>j.entity===p.id && j.kind==='purge').filter(j=>j.state!=='done').map(j=><p key={j.entity+j.state}>{j.error||(j.kind==='purge'?'Exclusão solicitada':j.kind==='import'?(j.state==='running'?'Baixando e preparando o vídeo':'Importação na fila'):null)||(({running:'Processando',queued:'Na fila'} as Record<string,string>)[j.state]||j.state)}</p>)}
-      <ProductionProgress project={p.id} jobs={data.jobs} clipIds={new Set(data.clips.filter(c=>c.project===p.id).map(c=>c.id))} offline={data.audienceStatus==='offline'}/>
+      <ProductionProgress eta={data.eta?.[p.id]} project={p.id} jobs={data.jobs} clipIds={new Set(data.clips.filter(c=>c.project===p.id).map(c=>c.id))} offline={data.audienceStatus==='offline'}/>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,320px),1fr))',gap:16}}>{data.clips.filter(c=>c.project===p.id&&!parents.has(c.id)&&(c.state!=='detected'||data.clips.some(v=>parents.has(v.id)&&root(v.id)===c.id&&v.state!=='detected'))).map(original=><article key={original.id} className="clipCard">
       {data.clips.filter(c=>root(c.id)===original.id).map((c,index)=>c.state==='detected'?null:<section className="clipVersion" key={c.id}>
         <header><span className="clipState">{stage(c)}</span><small>Versão {index+1}</small></header>

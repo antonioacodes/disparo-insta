@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS presets(project TEXT PRIMARY KEY, settings TEXT);
 CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY, media TEXT NOT NULL, title TEXT NOT NULL, duration REAL, transcript TEXT);
 CREATE TABLE IF NOT EXISTS clips(id TEXT PRIMARY KEY, project TEXT REFERENCES projects(id), start REAL, end REAL, title TEXT, score INTEGER, rationale TEXT, state TEXT);
 CREATE TABLE IF NOT EXISTS jobs(id INTEGER PRIMARY KEY, kind TEXT, entity TEXT, state TEXT DEFAULT 'queued', attempts INTEGER DEFAULT 0, error TEXT, UNIQUE(kind,entity));
+CREATE TABLE IF NOT EXISTS job_finish(job INTEGER PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,finished INTEGER);
 CREATE TABLE IF NOT EXISTS job_progress(job INTEGER PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE, stage TEXT, started INTEGER);
 CREATE TABLE IF NOT EXISTS revisions(id TEXT PRIMARY KEY REFERENCES clips(id), parent TEXT NOT NULL REFERENCES clips(id), created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS caption_edits(clip TEXT REFERENCES clips(id), segment INTEGER, text TEXT, PRIMARY KEY(clip,segment));
@@ -99,6 +100,7 @@ def analyze(key):
     row = db.execute("SELECT * FROM projects WHERE id=?", (key,)).fetchone()
     source = ROOT / "media" / row["media"]
     duration = float(command(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0",str(source)]).strip())
+    db.execute("UPDATE projects SET duration=? WHERE id=?", (duration,key))
     folder = WORK / key
     folder.mkdir(exist_ok=True)
     transcript = folder / (source.stem + ".json")
@@ -381,6 +383,8 @@ def worker():
                     analyze(job["entity"])
                 else:
                     render(job["entity"], job["kind"]=="final")
+                if job["kind"] in ("analyze","preview"):
+                    db.execute("INSERT OR REPLACE INTO job_finish VALUES(?,?)",(job["id"],int(time.time())))
                 db.execute("UPDATE jobs SET state='done' WHERE id=?", (job["id"],))
             except Exception as exc:
                 db.rollback()
@@ -409,6 +413,8 @@ if __name__ == "__main__":
         listing={table:[dict(row) for row in db.execute("SELECT * FROM "+table)] for table in ("projects","clips","revisions")}
         listing["jobs"]=[dict(row) for row in db.execute("""SELECT j.*,p.stage,p.started FROM jobs j
                            LEFT JOIN job_progress p ON p.job=j.id ORDER BY j.id""")]
+        from studio.eta import estimates
+        listing["eta"]=estimates(db)
         listing["cache"]={r["clip"]:dict(r) for r in db.execute("SELECT * FROM preview_cache")}
         listing["info"]={r["project"]:json.loads(r["details"]) for r in db.execute("SELECT * FROM media_info")}
         listing["audience"]={r["clip"]:json.loads(r["result"]) for r in db.execute("SELECT * FROM audience")}
