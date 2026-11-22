@@ -9,3 +9,18 @@
 .editStyle fieldset{border:0;padding:0;margin:18px 0}.editStyle legend{font-weight:700;margin-bottom:8px}
 .choiceRow{display:flex;gap:7px;flex-wrap:wrap;margin:5px 0 12px}.choiceRow button{background:white;border:1px solid #dfdbea;color:#393247}.choiceRow button[aria-pressed=true]{background:#ede7ff;border-color:#7657c7;color:#46288a}
 .captionSample{display:grid;gap:14px;margin:6px 0 16px;background:linear-gradient(130deg,#242337,#534267);border-radius:14px;padding:24px;color:white;font-size:clamp(22px,3vw,36px);font-weight:bold}.captionSample small{font:12px system-ui;color:#e1d9f0}
+
+.styleNote{display:flex;align-items:flex-start;gap:9px;padding:11px 14px;border:1px solid #eed58a;border-radius:10px;background:#fff6d5;color:#755400;font-size:.88rem;line-height:1.5}
+.styleNote svg,.studioTextInput svg,.sourcePicker svg{flex-shrink:0}
+.styleNote svg{margin-top:2px}
+.studioField{display:grid;gap:8px;max-width:42rem;font-size:.9rem;font-weight:650;color:#342f48}
+.studioTextInput,.sourcePicker{display:flex;align-items:center;gap:12px;border:1px solid #cfcbdc;border-radius:12px;padding:12px 14px;background:#fff;color:#645488}
+.studioTextInput input{border:0;outline:0;font:inherit;font-weight:450;min-width:0;width:100%;color:#262237;background:transparent}
+.studioTextInput:focus-within,.sourcePicker:focus-within{outline:3px solid #b9aafa;outline-offset:2px;border-color:#7453b9}
+.sourcePicker{position:relative;max-width:42rem;margin:14px 0;border-style:dashed;background:#faf8ff;cursor:pointer}
+.sourcePicker:hover{border-color:#8668bb;background:#f4f0ff}
+.sourcePicker input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.sourcePicker span{min-width:0;overflow-wrap:anywhere}
+.sourcePicker strong,.sourcePicker small{display:block}
+.sourcePicker small{margin-top:4px;color:#625c71}
+.sourcePicker[data-disabled=true]{opacity:.65}
