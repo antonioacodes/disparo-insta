@@ -53,8 +53,12 @@ export function ActivityInbox({data}:{data:Office|null}){
       const v=data?.ready.find(c=>c.id===i.entity)?.audience;
       const pct=votes(v);
       return <article key={i.kind+i.entity}><small>● Não lida · {i.agent}</small><strong>{i.label||labels[i.kind]}</strong><p>{i.title}</p>
-        {i.kind==='preview'&&<button onClick={()=>open(i,'view')} aria-label={'Ver prévia e teste de público de '+i.title}><Eye size={16}/> Ver prévia {pct!==null&&<><b style={{color:'#236139'}}>{pct}% favoráveis</b> · <b style={{color:'#9e3030'}}>{100-pct}% desfavoráveis</b></>}</button>}
-        <div><button onClick={()=>open(i,'approve')}>Aprovar</button> <button onClick={()=>open(i,'reject')}>Reprovar</button></div>
+        <div className={styles.reviewActions}>
+          {i.kind==='preview'&&<button className={styles.previewAction} onClick={()=>open(i,'view')} aria-label={'Ver prévia de '+i.title}><Eye size={14}/> Ver prévia</button>}
+          <button className={styles.approveAction} onClick={()=>open(i,'approve')}>Aprovar</button>
+          <button className={styles.rejectAction} onClick={()=>open(i,'reject')}>Reprovar</button>
+        </div>
+        {pct!==null&&<small><b style={{color:'#236139'}}>{pct}% favoráveis</b> · <b style={{color:'#9e3030'}}>{100-pct}% desfavoráveis</b></small>}
       </article>})}
     {!pending.length&&<p>{data?'Nenhuma atividade aguardando revisão.':'Consultando atividades…'}</p>}
     {(data?.decisions??[]).map(d=><article key={d.kind+d.entity}><small>{d.approved?'Aprovada':'Reprovada'} · {new Date(d.at*1000).toLocaleDateString('pt-BR')}</small><p>{d.title}</p></article>)}
@@ -73,8 +77,8 @@ export function ActivityInbox({data}:{data:Office|null}){
       {intent==='approve'&&['video','script'].includes(item.kind)&&<label><input type="checkbox" checked={checked} onChange={e=>check(e.target.checked)}/> Revisei o conteúdo e autorizo a próxima etapa.</label>}
       {intent==='approve'&&item.kind==='video'&&<label><input type="checkbox" checked={aiLabel} onChange={e=>labelAI(e.target.checked)}/> Rotular uso de IA</label>}
       {intent==='reject'&&<>{item.kind==='preview'&&<p>A reprovação exclui esta prévia da VPS. O vídeo original continua disponível.</p>}<label>Comentário<textarea value={note} onChange={e=>setNote(e.target.value)}/></label></>}
-      {intent==='view'?<><button onClick={()=>setIntent('approve')}>Aprovar</button><button onClick={()=>setIntent('reject')}>Reprovar</button></>:
-      <button disabled={!data?.reviewEnabled||busy||(intent==='approve'&&((item.kind==='script'&&(!script||!checked))||(item.kind==='video'&&!checked)))} onClick={decide}>{busy?'Salvando…':intent==='reject'?'Confirmar reprovação':({trend:'Enviar para edição',briefing:'Gerar roteiro',script:'Produzir vídeo',preview:'Preparar para publicação',video:'Enviar para Publicações',job:'Confirmar aprovação'})[item.kind]}</button>}
+      {intent==='view'?<div className={styles.reviewActions}><button className={styles.approveAction} onClick={()=>setIntent('approve')}>Aprovar</button><button className={styles.rejectAction} onClick={()=>setIntent('reject')}>Reprovar</button></div>:
+      <button className={intent==='reject'?styles.rejectAction:styles.approveAction} disabled={!data?.reviewEnabled||busy||(intent==='approve'&&((item.kind==='script'&&(!script||!checked))||(item.kind==='video'&&!checked)))} onClick={decide}>{busy?'Salvando…':intent==='reject'?'Confirmar reprovação':({trend:'Enviar para edição',briefing:'Gerar roteiro',script:'Produzir vídeo',preview:'Preparar para publicação',video:'Enviar para Publicações',job:'Confirmar aprovação'})[item.kind]}</button>}
       {message&&<p role="status">{message}</p>}</>}
     </dialog></section>;
 }
