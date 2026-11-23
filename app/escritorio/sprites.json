@@ -1,0 +1,99 @@
+{
+  "characters": {
+    "cell": 64,
+    "directions": [
+      "down",
+      "up",
+      "left",
+      "right"
+    ],
+    "states": {
+      "Parado": [
+        0,
+        2
+      ],
+      "Andar": [
+        2,
+        6
+      ],
+      "Sentar": [
+        8,
+        1
+      ],
+      "Digitar": [
+        9,
+        3
+      ],
+      "Caf\u00e9": [
+        12,
+        2
+      ]
+    }
+  },
+  "tiles": {
+    "D": [
+      "furniture",
+      0
+    ],
+    "C": [
+      "furniture",
+      1
+    ],
+    "X": [
+      "furniture",
+      2
+    ],
+    "M": [
+      "furniture",
+      3
+    ],
+    "K": [
+      "furniture",
+      4
+    ],
+    "S": [
+      "furniture",
+      5
+    ],
+    "P": [
+      "decoration",
+      0
+    ],
+    "V": [
+      "decoration",
+      1
+    ],
+    "T": [
+      "decoration",
+      2
+    ],
+    "A": [
+      "decoration",
+      3
+    ],
+    "0": [
+      "architecture",
+      0
+    ],
+    "1": [
+      "architecture",
+      1
+    ],
+    "2": [
+      "architecture",
+      2
+    ],
+    "#": [
+      "architecture",
+      3
+    ],
+    "g": [
+      "architecture",
+      4
+    ],
+    "r": [
+      "architecture",
+      5
+    ]
+  }
+}

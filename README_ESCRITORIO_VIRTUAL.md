@@ -360,3 +360,5 @@ Canvas 2D desenha um mapa em JSON com colisão e um atlas de personagens em pixe
 Cada etapa exige commit próprio e aprovação antes da seguinte.
 
 A HUD da demonstração compartilha as contagens com a Central. Hoje e Esta semana incluem fila, execução e conclusões. Publicações usa sempre a janela de 72 horas. Os exemplos ficam em map.json. A estimativa aguarda histórico real na integração de backend. O cenário usa mobiliário em pixel art próprio e respeita a preferência de movimento reduzido.
+
+A versão visual aprovada usa Office Pixel Art Free da Imersa Studios (ver CREDITS.md). O navegador lê o mapa Tiled public/office/office.tmj e os quatro atlas PNG. O tile mede 32 px e a altura visual de referência do personagem em pé é 48 px antes do zoom inteiro de 2× a 4×. A área de colisão acompanha os pés do personagem.

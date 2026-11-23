@@ -35,3 +35,5 @@
 .hud nav{display:flex;gap:6px;width:100%;overflow:auto}.hud nav button{white-space:nowrap}.hud i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
 @media(min-aspect-ratio:21/12){.world{height:100%;min-height:360px}}
 @media(max-width:700px){.hud{gap:4px 8px;padding:5px 8px;font-size:11px}.hud label{order:1;margin-left:auto}.stats{order:2}.overall{order:3}.hud nav{order:4}.stats span{padding:3px}.world{width:max(760px,138dvh)}}
+.viewport{display:flex;align-items:flex-start}
+.world{flex:none;margin:auto;aspect-ratio:auto}

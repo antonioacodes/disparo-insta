@@ -3,8 +3,7 @@ import {useEffect,useRef,useState} from 'react';
 import Link from 'next/link';
 import styles from './office.module.css';
 import map from './map.json';
-import {furniture} from './decor';
-import atlas from './atlas.json';
+import {loadScene} from './assets';
 
 type Point = {x:number;y:number};
 const size=32;
@@ -13,11 +12,11 @@ const aliases:Record<string,string>={w:'ArrowUp',a:'ArrowLeft',s:'ArrowDown',d:'
 // Caio takes two steps beside the coffee station and then returns to his cup.
 const idleOffsets=[0,0,0,0,0,0,0,0,.3,.65,1,1,1,.65,.3,0];
 const same=(a:Point,b:Point)=>a.x===b.x && a.y===b.y;
-function walkable(p:Point){
+function walkable(p:Point,solid:number[]){
   const tile=map.tiles[p.y]?.[p.x];
-  return (tile==='.' || tile==='r' || tile==='g') && !map.rooms.some(room=>same(room,p)||(!room.working&&p.y===room.y&&p.x===room.x+1));
+  return tile!==undefined && solid[p.y*map.tiles[0].length+p.x]===0 && !map.rooms.some(room=>same(room,p)||(!room.working&&p.y===room.y&&p.x===room.x+1));
 }
-function path(from:Point,to:Point){
+function path(from:Point,to:Point,solid:number[]){
   const queue=[from], parents=new Map<Point,Point>(), seen=new Set([from.x+','+from.y]);
   for(let i=0;i<queue.length;i++){
     const p=queue[i];
@@ -28,15 +27,20 @@ function path(from:Point,to:Point){
     }
     for(const delta of Object.values(directions)){
       const n={x:p.x+delta.x,y:p.y+delta.y}, key=n.x+','+n.y;
-      if(walkable(n)&&!seen.has(key)){seen.add(key);parents.set(n,p);queue.push(n)}
+      if(walkable(n,solid)&&!seen.has(key)){seen.add(key);parents.set(n,p);queue.push(n)}
     }
   }
   return [];
 }
 
 export default function Office(){
+  const [scene,setScene]=useState<Awaited<ReturnType<typeof loadScene>>|null>(null),[assetError,setAssetError]=useState(false);
+  const solid=scene?.map.layers[1].data;
+  useEffect(()=>{let active=true;loadScene().then(value=>{if(active)setScene(value)}).catch(()=>{if(active)setAssetError(true)});return ()=>{active=false}},[]);
   const canvas=useRef<HTMLCanvasElement>(null);
-  const timer=useRef<ReturnType<typeof setInterval>|undefined>(undefined);
+  const position=useRef<Point>(map.spawn), route=useRef<Point[]>([]), held=useRef<Point|null>(null);
+  const facing=useRef('down'),distance=useRef(0),walking=useRef(false);
+  const [scale,setScale]=useState(1);
   const [avatar,move]=useState(map.spawn),[room,select]=useState<number|null>(null);
   const [week,setWeek]=useState(false),[today,setToday]=useState<Date|null>(null),[frame,tick]=useState(0);
   useEffect(()=>{
@@ -54,85 +58,71 @@ export default function Office(){
   const total=done+pending+rooms.filter(r=>r.working).length;
   const dialog=useRef<HTMLDialogElement>(null);
   const viewport=useRef<HTMLDivElement>(null);
-  useEffect(()=>{const el=viewport.current;if(el)el.scrollLeft=(el.scrollWidth-el.clientWidth)/2},[]);
-  useEffect(()=>{if(room!==null)dialog.current?.showModal();else dialog.current?.close()},[room]);
   const width=map.tiles[0].length*size,height=map.tiles.length*size;
-  useEffect(()=>()=>clearInterval(timer.current),[]);
+  useEffect(()=>{
+    const el=viewport.current!;
+    const resize=new ResizeObserver(()=>{
+      const zoom=Math.min(4,Math.max(2,Math.round(Math.min(el.clientWidth/width,el.clientHeight/height))));
+      setScale(zoom);
+    });
+    resize.observe(el);
+    return ()=>resize.disconnect();
+  },[width,height]);
+  useEffect(()=>{
+    const el=viewport.current!;
+    el.scrollLeft=(el.scrollWidth-el.clientWidth)/2;
+    el.scrollTop=Math.max(0,(position.current.y+0.5)*size*scale-el.clientHeight/2);
+  },[scale]);
+  useEffect(()=>{if(room!==null){route.current=route.current.slice(0,1);held.current=null;dialog.current?.showModal()}else dialog.current?.close()},[room]);
+  useEffect(()=>{
+    let id=0,previous=0;
+    function animate(now:number){
+      const p=position.current;
+      if(!route.current.length&&held.current){
+        const n={x:Math.round(p.x)+held.current.x,y:Math.round(p.y)+held.current.y};
+        if(solid&&walkable(n,solid))route.current=[n];
+      }
+      const target=route.current[0];
+      if(target){
+        const dx=target.x-p.x,dy=target.y-p.y,len=Math.hypot(dx,dy);
+        const advance=Math.min(len,Math.min(now-previous,45)*.005);
+        if(len>0)facing.current=dx>0?'right':dx<0?'left':dy<0?'up':'down';
+        const n=advance>=len?target:{x:p.x+dx*advance/len,y:p.y+dy*advance/len};
+        if(advance>=len)route.current.shift();
+        distance.current+=advance;walking.current=true;position.current=n;move(n);
+        const el=viewport.current,scene=canvas.current;
+        if(el&&scene){
+          const rect=scene.getBoundingClientRect(),view=el.getBoundingClientRect();
+          const x=rect.left+(n.x+.5)*rect.width/map.tiles[0].length,y=rect.top+(n.y+.5)*rect.height/map.tiles.length;
+          el.scrollBy(x-Math.max(view.left+30,Math.min(view.right-30,x)),y-Math.max(view.top+30,Math.min(view.bottom-30,y)));
+        }
+      }else if(walking.current){walking.current=false;move({...p})}
+      previous=now;id=requestAnimationFrame(animate);
+    }
+    id=requestAnimationFrame(animate);return ()=>cancelAnimationFrame(id);
+  },[solid]);
   useEffect(()=>{
     const ctx=canvas.current?.getContext('2d');
     if(!ctx)return;
-    function box(x:number,y:number,w:number,h:number,color:string){
-      ctx!.fillStyle=color;ctx!.fillRect(x,y,w,h);
+    ctx.imageSmoothingEnabled=false;
+    if(!scene)return;
+    const {width:cols,height:rows,layers}=scene.map;
+    const entities=people.map((r,i)=>({x:r.x,y:r.y,draw:()=>{
+      const stroll=!Number.isInteger(r.x);
+      scene.actor(ctx,i,r.x,r.y,r.working?'up':stroll?(frame<11?'right':'left'):'down',r.working?'Digitar':stroll?'Andar':'Café',frame);
+    }}));
+    entities.push({x:avatar.x,y:avatar.y,draw:()=>scene.actor(ctx,3,avatar.x,avatar.y,facing.current,walking.current?'Andar':'Parado',walking.current?Math.floor(distance.current*8):frame)});
+    layers[0].data.forEach((gid,i)=>scene.tile(ctx,gid,i%cols,Math.floor(i/cols)));
+    for(let y=0;y<rows;y++){
+      for(let x=0;x<cols;x++)scene.tile(ctx,layers[1].data[y*cols+x],x,y);
+      entities.filter(e=>Math.floor(e.y)===y).sort((a,b)=>a.y-b.y).forEach(e=>e.draw());
     }
-    map.tiles.forEach((line,y)=>Array.from(line).forEach((tile,x)=>{
-      const l=x*size,t=y*size;
-      const floor=y<6?['#eedff7','#d7eee7','#f7e1d6'][Math.min(2,Math.floor(x/7))]:'#eee7d8';
-      box(l,t,size,size,tile==='g'||tile==='T'?'#bbd4aa':floor);
-      if(tile==='g'||tile==='T'){
-        box(l+7,t+9,2,4,'#91ad80');box(l+9,t+7,2,4,'#91ad80');box(l+25,t+22,3,2,'#d4dda6');
-      }else if(tile==='r'){
-        box(l,t,size,size,'#606875');box(l,t,size,5,'#c5c3b9');box(l+4,t+22,16,2,'#e4c988');
-      }else{
-        box(l,t+15,32,1,'#c9bda9');box(l+((x+y)%2?8:24),t,1,15,'#c9bda9');box(l,t+31,32,1,'#cabfae');
-      }
-      if(y>=2&&y<=5&&x>7&&x<13){
-        box(l,t,32,32,(x+y)%2?'#c7dcd3':'#d9e5da');box(l,t,1,32,'#adbfba');box(l,t,32,1,'#adbfba');
-      }
-      if(y>=3&&y<=5&&x>1&&x<7){
-        box(l,t,32,32,'#bcb1d1');for(let k=0;k<32;k+=8)box(l+k,t,2,32,'#b5a8c9');
-      }
-      furniture(ctx!,tile,l,t);
-      if(tile==='#'){
-        box(l,t,size,size,'#424b5c');box(l+1,t+2,30,20,'#677687');box(l+1,t+23,30,5,'#515d70');
-        if((y===1||y===9)&&x%6>=2&&x%6<=4){
-          box(l+1,t+5,30,15,'#99c8d4');box(l+3,t+6,12,3,'#cfe5e4');box(l+15,t+5,2,15,'#536979');
-        }
-      }
-      if(tile==='T'||tile==='P'){
-        const pot=tile==='P';
-        box(l+9,t+23,15,5,'#87957a');box(l+11,t+17,11,10,pot?'#b37457':'#805d44');
-        box(l+4,t+9,24,10,'#416e58');box(l+8,t+4,16,16,'#508564');
-        box(l+12,t+1,9,16,'#75a875');box(l+4,t+7,9,4,'#84ad76');
-      }
-      if(tile==='K'){
-        box(l+3,t+4,26,24,'#816853');box(l+5,t+6,22,19,'#b9946d');
-        for(let j=0;j<5;j++)box(l+6+j*4,t+8+(j%2)*2,3,8,['#64778b','#d9ab69','#8b645e'][j%3]);
-        box(l+4,t+17,24,2,'#725c50');box(l+8,t+20,14,4,'#ede4ce');
-      }
-      if(tile==='D'||tile==='C'){
-        box(l+1,t+10,30,19,'#986c55');box(l+1,t+8,30,16,'#c29b78');
-        box(l+6,t+2,20,14,'#394456');box(l+8,t+4,16,9,tile==='C'?'#c1adff':'#94d9d4');
-        box(l+9,t+18,14,3,'#e6dccb');
-      }
-    }));
-    function sprite(p:Point,shirt:string,seated:boolean){
-      const colors:Record<string,string>={...atlas.palette,c:shirt};
-      atlas[seated?'seated':'standing'].forEach((row,y)=>Array.from(row).forEach((pixel,x)=>{
-        if(colors[pixel])box(p.x*size+x*4,p.y*size+y*4,4,4,colors[pixel]);
-      }));
-      if(!seated&&p.x%1!==0)box(p.x*size+3,p.y*size+29,7,3,colors.b);
-      if(seated)box(p.x*size+6,p.y*size+28,20,5,'#6e5660');
-    }
-    people.forEach((r,i)=>{
-      sprite(r,r.color,r.working);
-      const l=r.x*size,t=r.y*size;
-      // Hair, clothing and handheld props distinguish the three people.
-      if(i===0){box(l+3,t+9,5,12,'#483745');box(l+22,t+5,4,5,'#deac68')}
-      if(i===2){box(l+3,t+5,22,5,'#9e533d');box(l+23,t+9,5,13,'#944635')}
-      if(r.working){
-        box(l+2,t+16+(frame%2)*2,6,4,'#eac5a1');box(l+23,t+18-(frame%2)*2,6,4,'#eac5a1');
-      }else{
-        const lift=frame>=4&&frame<=6?6:0;
-        box(l+18,t+20-lift,8,7,'#fff1cb');box(l+26,t+21-lift,3,4,'#d8ba92');
-        box(l+19,t+19-lift,6,2,'#725644');
-      }
-      ctx.fillStyle='#384553';ctx.font='bold 10px system-ui';ctx.textAlign='center';
-      box((4+6*i)*size-28,6*size+1,80,14,'#ffefd4');
-      ctx.fillText(r.name,(4+6*i)*size+12,6*size+12);
+    ctx.font='bold 10px system-ui';ctx.textAlign='center';
+    map.rooms.forEach((r,i)=>{
+      ctx.fillStyle='#ffefd4';ctx.fillRect((4+6*i)*size-28,6*size+1,80,14);
+      ctx.fillStyle='#384553';ctx.fillText(r.name,(4+6*i)*size+12,6*size+12);
     });
-    sprite(avatar,'#3766d6',false);
-    box(avatar.x*size+((avatar.x+avatar.y)%2?4:19),avatar.y*size+27,8,4,'#263854');
-  },[avatar,frame]);
+  },[avatar,frame,scene]);
   const anchor=(x:number,y:number)=>({left:(x+.5)*size/width*100+'%',top:y*size/height*100+'%'});
   return <main className={styles.office} aria-label="Escritório virtual">
     <header className={styles.hud}><Link href="/studio" className={styles.back} aria-label="Voltar ao Studio" title="Voltar ao Studio">←</Link>
@@ -142,20 +132,27 @@ export default function Office(){
     <label><select aria-label="Período do escritório" value={week?'week':'today'} onChange={e=>setWeek(e.target.value==='week')}><option value="today">Hoje</option><option value="week">Esta semana</option></select></label>
     <nav aria-label="Progresso por agente">{rooms.map((r,i)=><button key={r.name} onClick={()=>select(i)}><i style={{background:r.color}}/>{r.person} · {r.done}/{r.done+r.count+Number(r.working)}</button>)}
     <button onClick={()=>select(-1)}>Central de operações ↗</button></nav></header>
-    <div className={styles.viewport} ref={viewport}><div className={styles.world}>
+    {assetError&&<p role="alert">Falha ao carregar a arte do escritório. Recarregue a página.</p>}
+    <div className={styles.viewport} ref={viewport}><div className={styles.world} style={{width:width*scale,height:height*scale,minHeight:0}}>
     <canvas ref={canvas} tabIndex={0} aria-label="Mapa do escritório. Use setas ou WASD para andar, Enter para interagir ou toque no chão." width={width} height={height}
       onKeyDown={e=>{
         if(e.key==='Enter'){
           const near=(p:Point)=>Math.abs(p.x-avatar.x)+Math.abs(p.y-avatar.y)<=1;
           const index=people.findIndex(r=>near({...r,x:Math.round(r.x)}));
-          if(index>=0||near(map.computer)){clearInterval(timer.current);select(index)}
+          if(index>=0||near(map.computer)){select(index)}
           return;
         }
         const delta=directions[aliases[e.key.toLowerCase()]||e.key];
         if(!delta)return;
-        e.preventDefault();clearInterval(timer.current);
-        move(p=>{const n={x:p.x+delta.x,y:p.y+delta.y};return walkable(n)?n:p});
+        e.preventDefault();held.current=delta;
+        route.current=route.current.slice(0,1);
+        if(!e.repeat&&!route.current.length){
+          const n={x:Math.round(position.current.x)+delta.x,y:Math.round(position.current.y)+delta.y};
+          if(solid&&walkable(n,solid))route.current=[n];
+        }
       }}
+      onKeyUp={e=>{if(directions[aliases[e.key.toLowerCase()]||e.key]===held.current)held.current=null}}
+      onBlur={()=>{held.current=null}}
       onPointerMove={e=>{
         const rect=e.currentTarget.getBoundingClientRect();
         const p={x:Math.floor((e.clientX-rect.left)*width/rect.width/size),y:Math.floor((e.clientY-rect.top)*height/rect.height/size)};
@@ -163,16 +160,16 @@ export default function Office(){
         e.currentTarget.title=agent?agent.name+' · '+agent.task:same(p,map.computer)?'Computador central':'';
       }}
       onClick={e=>{
-        e.currentTarget.focus();clearInterval(timer.current);
+        e.currentTarget.focus({preventScroll:true});held.current=null;
         const rect=e.currentTarget.getBoundingClientRect();
         const p={x:Math.floor((e.clientX-rect.left)*width/rect.width/size),y:Math.floor((e.clientY-rect.top)*height/rect.height/size)};
         const i=map.rooms.findIndex(r=>same(p,r));
         if(i>=0||same(p,map.computer)){select(i);return}
-        const steps=path(avatar,p);
-        if(steps.length)timer.current=setInterval(()=>{move(steps.shift()!);if(!steps.length)clearInterval(timer.current)},90);
+        const first=route.current.slice(0,1);
+        route.current=[...first,...(solid?path(first[0]||position.current,p,solid):[])];
       }}/>
     {people.map((r,i)=><div key={r.name}>
-      <button className={styles.person} style={anchor(r.x,r.y)} onClick={()=>select(i)}>
+      <button className={styles.person} style={anchor(r.x,r.y-.5)} onClick={()=>select(i)}>
         <span className={styles.tag}><i data-state={r.working?'working':'idle'}/>{r.person}</span>
         <span className={styles.bubble}>{r.task} · {r.elapsed}<br/>A seguir · {r.next}</span>
       </button>
@@ -180,7 +177,7 @@ export default function Office(){
         <b>{r.task}</b><span>{r.elapsed} · {r.next}</span>
       </button>
     </div>)}
-    <span className={styles.you} style={anchor(avatar.x,avatar.y)}>Você</span>
+    <span className={styles.you} style={anchor(avatar.x,avatar.y-.5)}>Você</span>
     <button className={styles.board} style={anchor(map.computer.x,map.computer.y)} onClick={()=>select(-1)}>
       <b>Central de operações</b>
       {rooms.map(r=><span key={r.name}>{r.name} · {r.done} prontas · {r.count} na fila</span>)}
