@@ -1,4 +1,5 @@
 """Run one focus group in an isolated TinyTroupe interpreter."""
+import hashlib
 import json
 import subprocess
 import sys
@@ -15,7 +16,7 @@ PROFILES = {
 DIMENSIONS = ("Gancho", "Engajamento", "Clareza", "Ritmo")
 
 
-def evaluate(inputs, preview, directory):
+def evaluate(inputs, preview, directory, checkpoint=None):
     from tinytroupe.agent import TinyPerson
 
     frames = []
@@ -28,8 +29,17 @@ def evaluate(inputs, preview, directory):
             frames.append(str(path))
     if not frames:
         raise ValueError("Prévia sem quadros legíveis")
+    signature = hashlib.sha256(json.dumps([inputs,Path(preview).stat().st_mtime_ns],sort_keys=True).encode()).hexdigest()
+    completed = {}
+    if checkpoint and checkpoint.is_file():
+        saved = json.loads(checkpoint.read_text())
+        if saved.get("signature") == signature:
+            completed = saved["completed"]
     people = []
     for profile, description in PROFILES.items():
+        if profile in completed:
+            people.append(completed[profile])
+            continue
         person = TinyPerson(profile)
         person.define("occupation", description)
         person.see(images=frames, description="Quadros em ordem cronológica da prévia.")
@@ -46,6 +56,11 @@ def evaluate(inputs, preview, directory):
                 if (all(type(answer["notas"][k]) is int and 0 <= answer["notas"][k] <= 100 for k in DIMENSIONS)
                         and all(isinstance(answer[k], str) and answer[k].strip() for k in ("motivo", "sugestao"))):
                     people.append(dict(answer, perfil=profile))
+                    completed[profile] = people[-1]
+                    if checkpoint:
+                        pending = checkpoint.with_suffix(".tmp")
+                        pending.write_text(json.dumps(dict(signature=signature,completed=completed)))
+                        pending.replace(checkpoint)
                     break
         else:
             raise ValueError(f"Parecer incompleto de {profile}")
@@ -60,5 +75,6 @@ def evaluate(inputs, preview, directory):
 
 if __name__ == "__main__":
     with TemporaryDirectory() as temp:
-        result = evaluate(json.load(sys.stdin), sys.argv[1], Path(temp))
+        checkpoint = Path(sys.argv[3]) if len(sys.argv)>3 else None
+        result = evaluate(json.load(sys.stdin), sys.argv[1], Path(temp), checkpoint)
         Path(sys.argv[2]).write_text(json.dumps(result, ensure_ascii=False))

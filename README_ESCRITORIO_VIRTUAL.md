@@ -372,3 +372,17 @@ Para rodar localmente, inicie o site com `npm run dev` e, em outro terminal na r
 O progresso sobre Lia é uma estimativa da tarefa em execução. O cálculo usa a mediana dos últimos vinte trabalhos concluídos do mesmo tipo, ajustada pela duração da mídia quando disponível. Para a primeira análise ou renderização, usa a duração do vídeo ou corte. Durante uma importação sem referência de tempo, a barra indica atividade até haver uma estimativa. A avaliação de público e os jobs de vídeo compartilham um bloqueio exclusivo de CPU na VPS.
 
 Tendências e Publicações aguardam as respectivas integrações. O painel histórico detalhado e a transmissão de eventos ficam para a Etapa 3. A proteção de produção por proxy ou sessão ainda requer confirmação antes de habilitar publicação ou reprocessamento pelo escritório. Esta etapa utiliza as configurações existentes do Studio e dispensa novas chaves.
+
+### Medição antes de ativar Tendências
+
+O orçamento de execução de um relatório pode chegar a cinco horas. A prioridade é preservar CPU e memória para vídeos. O desenho prevê análise em pequenos lotes com uma thread, liberando o bloqueio de CPU entre lotes. As cadências consideradas são diária, a cada três dias ou semanal. A periodicidade definitiva depende da configuração do departamento.
+
+Na VPS Linux, com o Ollama local iniciado, rode o ensaio a partir da raiz do projeto. Os dois modelos abaixo são candidatos para comparação. Instale-os apenas se ainda não estiverem disponíveis.
+
+```bash
+ollama pull qwen2.5:0.5b
+ollama pull qwen2.5:1.5b
+python3 -m studio.benchmark_trends qwen2.5:0.5b qwen2.5:1.5b
+```
+
+O ensaio usa CPU, uma thread e o mesmo exemplo de tendência para ambos. Ele mede tempo total, tempo de geração, CPU média (100% representa um núcleo) e pico de memória RSS dos processos Ollama, amostrado a cada 250 ms. Rode sem outras requisições ao Ollama. A resposta também é registrada para revisão. O exemplo verifica se o modelo distingue variação observada de um único ponto de dados. A escolha do modelo e o agendamento aguardam as medições da VPS.

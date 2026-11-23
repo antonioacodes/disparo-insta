@@ -1,8 +1,8 @@
 import {useEffect,useState} from 'react';
 
 type Task = {label:string;stage:string|null;project:string|null;clip:string|null;started:number|null;queuedAt:number|null;error:string|null};
-type Ready = {id:string;title:string;projectTitle:string;project:string;kind:'preview'|'final'};
-export type Office = {status:string;current:Task|null;next:Task|null;lastError:Task|null;failed:number;queued:number;
+type Ready = {state:string;audience?:import('../studio/Audience').Verdict|null;id:string;title:string;projectTitle:string;project:string;kind:'preview'|'final'};
+export type Office = {audienceStatus?:string;status:string;current:Task|null;next:Task|null;lastError:Task|null;failed:number;queued:number;
   finished:number[];ready:Ready[];prediction:{percent:number;remaining:number}|null};
 
 export function useOffice(){

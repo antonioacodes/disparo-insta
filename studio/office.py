@@ -1,4 +1,5 @@
 """Read the editing queue without loading transcripts or running video work."""
+import json
 import statistics
 import time
 
@@ -53,13 +54,15 @@ def snapshot(db, work, online):
             samples = [max(5, units * (2 if active["kind"]=="analyze" else 1))]
         prediction = forecast(max(0, now-active["started"]), samples)
     ready = []
-    for clip in db.execute("""SELECT c.id,c.title,c.project,p.title projectTitle,c.state FROM clips c
-        JOIN projects p ON p.id=c.project LEFT JOIN preview_cache cache ON cache.clip=c.id
+    for clip in db.execute("""SELECT c.id,c.title,c.project,p.title projectTitle,c.state,a.result verdict FROM clips c
+        JOIN projects p ON p.id=c.project LEFT JOIN preview_cache cache ON cache.clip=c.id LEFT JOIN audience a ON a.clip=c.id
         WHERE c.state='rendered' OR (c.state='pending_review' AND COALESCE(cache.removed,0)=0
         AND (cache.expires IS NULL OR cache.expires>?)) ORDER BY c.rowid DESC""",(now,)):
         kind = "final" if clip["state"]=="rendered" else "preview"
         if (work/clip["project"]/(clip["id"]+"-"+kind+".mp4")).is_file():
-            ready.append({**dict(clip),"kind":kind})
+            item = dict(clip)
+            raw = item.pop("verdict")
+            ready.append({**item,"kind":kind,"audience":json.loads(raw) if raw else None})
     finished = [r[0] for r in db.execute("""SELECT MAX(e.at) FROM processing_events e JOIN jobs j ON j.id=e.job
         WHERE j.state='done' AND e.message='Concluído' AND e.at>=? GROUP BY j.id""",(now-7*86400,))]
     return {"status":agent_state(online,active,queue,failed),"current":describe(active) if active else None,

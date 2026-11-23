@@ -10,7 +10,7 @@ RETENTION = 15 * 86400
 
 
 def remove_preview(work, project, clip):
-    for suffix in ("-preview.mp4", "-poster.jpg", "-poster.jpg.tmp.jpg"):
+    for suffix in ("-preview.mp4", "-preview.audience.json", "-preview.audience.tmp", "-poster.jpg", "-poster.jpg.tmp.jpg"):
         (work / project / (clip + suffix)).unlink(missing_ok=True)
 
 

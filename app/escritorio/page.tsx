@@ -6,6 +6,7 @@ import map from './map.json';
 import {useOffice} from './useOffice';
 import {ProjectIntake} from '../studio/reaproveitar/ProjectIntake';
 import {Department,ActionCard,StatusIcon} from './Department';
+import {Audience} from '../studio/Audience';
 import {Ambience} from './Ambience';
 import {loadScene} from './assets';
 
@@ -230,6 +231,6 @@ export default function Office(){
       </Department>}
       {(room===0&&view==='ready'||room===-1)&&<section><h3>Vídeos prontos {data&&'· '+ready.length}</h3>
         {!data?<p>{failed?'Não foi possível consultar o Studio.':'Consultando o Studio…'}</p>:ready.length===0?<p>A primeira prévia aparecerá aqui assim que estiver disponível.</p>:ready.map(c=><details key={c.id}><summary>{c.projectTitle} · {c.title}</summary>
-          <OfficeVideo id={c.id} kind={c.kind}/><Link href={{pathname:'/studio',query:{project:c.project}}}>Abrir revisão no Studio</Link></details>)}</section>}
+          <OfficeVideo id={c.id} kind={c.kind}/><Audience v={c.audience??undefined} status={data?.audienceStatus} clip={c} removed={false}/><Link href={{pathname:'/studio',query:{project:c.project}}}>Abrir revisão no Studio</Link></details>)}</section>}
     </dialog></main>
 }
