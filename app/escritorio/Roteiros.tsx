@@ -43,7 +43,7 @@ export function Roteiros({publicacoes=false}:{publicacoes?:boolean}){
         {item.producao.erro&&<p role="alert">{item.producao.erro}</p>}
         {item.producao.pronto&&<video key={item.producao.etapas[item.producao.etapas.length-1]?.fim??undefined} controls playsInline preload="metadata" src={'/api/studio/workflow/video?kind=producao&id='+item.id}/>}
         <details><summary>Tempos e créditos</summary>{item.producao.etapas.map(e=><p key={e.etapa+e.cena}>{e.etapa} · cena {e.cena+1} · {e.inicio&&e.fim?Math.round(e.fim-e.inicio)+' s':'Sem dados ainda'}</p>)}
-        {item.producao.assets.map((a,i)=><p key={i}>{a.url?<a href={a.url} target="_blank" rel="noreferrer">{a.autor} · Pexels</a>:a.origem}</p>)}</details>
+        {item.producao.assets.map((a,i)=><p key={i}>{a.url?<a href={a.url} target="_blank" rel="noreferrer">{a.autor} · {a.origem}</a>:a.origem}</p>)}</details>
         {item.status==='aguardando_revisao_video'&&<><label>Comentário de revisão<textarea value={comment} onChange={e=>setComment(e.target.value)}/></label>
           {item.roteiro?.cenas.map((c,i)=><details key={c.id}><summary>Cena {i+1} · {c.tipo}</summary><pre>{item.producao?.legendas.find(l=>l.cena===i)?.srt||c.legenda_destaque}</pre>
           {['narracao','broll','legendas'].map(parte=><button key={parte} disabled={busy||!comment.trim()} onClick={()=>act('regenerar',{cena:i,parte,comentario:comment})}>Refazer {parte}</button>)}</details>)}

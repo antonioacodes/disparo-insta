@@ -47,3 +47,27 @@ Crie um briefing e gere o roteiro. A produção fica disponível depois de revis
 ~~~sh
 python3 -m unittest discover -s tests
 ~~~
+
+### Mídia e som ambiente da Bia
+
+No arquivo de ambiente do Studio, cada provedor aceita uma chave ou várias separadas por vírgula. A ordem indica preferência. Uma chave inválida permite tentar a próxima. O limite de cota do provedor continua valendo.
+
+```dotenv
+PIXABAY_API_KEY=
+PEXELS_API_KEY=
+FREESOUND_API_KEY=
+MIXKIT_CATALOG=
+AMBIENCIA=on
+```
+
+A produção aprovada procura cenas no catálogo local do Mixkit, Pixabay, Pexels e Wikimedia Commons. No Commons são selecionados apenas arquivos identificados como CC0 ou domínio público. Sem cena compatível, a montagem usa o fundo sólido. Origem e autor aparecem na revisão.
+
+Para Mixkit, baixe os vídeos com **Stock Video Free License** e coloque-os junto de um catálogo JSON. Aponte MIXKIT_CATALOG para o caminho absoluto do JSON. Exemplo de estrutura (substitua a URL pela página real do clipe):
+
+```json
+[{"file":"chuva.mp4","tags":["rain","city","street"],"license":"Free License","author":"Nome do autor","url":"https://mixkit.co/..."}]
+```
+
+Com AMBIENCIA=on, cada cena pode receber um som ambiente sugerido pelo roteiro, abaixo da narração. Com AMBIENCIA=off o vídeo usa apenas narração. O Commons funciona sem chave. Se configurar Freesound, a busca prioriza prévias de sons CC0 desse provedor. Para projetos monetizados, confirme a licença comercial da API com o Freesound antes de configurar a chave. Sem resultado compatível, a cena mantém a voz sozinha.
+
+Documentação: [Pixabay](https://pixabay.com/api/docs/), [Mixkit](https://mixkit.co/license/), [Commons](https://commons.wikimedia.org/wiki/Commons:Reusing_content_outside_Wikimedia), [Freesound](https://freesound.org/docs/api/terms_of_use.html).

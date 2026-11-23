@@ -14,6 +14,7 @@ import urllib.parse
 import urllib.request
 import wave
 
+from studio import stock_media as stock
 from studio.roteiros import config, transition
 
 STAGES=('cenas','broll','narracao','montagem','legendas')
@@ -54,7 +55,7 @@ def begin(db,ident):
     enqueue(db,ident,'cenas',0)
 
 
-def visual(db,pid,i,scene,vertical):
+def pexels(db,pid,i,scene,vertical):
     cfg=config()
     cache=root()/'cache-pexels'
     cache.mkdir(exist_ok=True)
@@ -73,9 +74,19 @@ def visual(db,pid,i,scene,vertical):
                 raise ValueError('Cota do Pexels próxima do limite. Retome a etapa após a renovação.')
             rid=db.execute('INSERT INTO pexels_consultas(instante,producao) VALUES(?,?)',(now,pid)).lastrowid
             db.execute('UPDATE producoes_video SET chamadas_pexels=chamadas_pexels+1 WHERE id=?',(pid,))
-            req=urllib.request.Request('https://api.pexels.com/v1/videos/search?'+params,headers={'Authorization':cfg['PEXELS_API_KEY']})
+            req=urllib.request.Request('https://api.pexels.com/videos/search?'+params)
             try:
-                with urllib.request.urlopen(req,timeout=45) as response:
+                for key in stock.keys(cfg['PEXELS_API_KEY']):
+                    req.add_header('Authorization',key)
+                    try:
+                        response=urllib.request.urlopen(req,timeout=45)
+                        break
+                    except urllib.error.HTTPError as exc:
+                        if exc.code!=401:
+                            raise
+                else:
+                    raise ValueError('Chaves Pexels inválidas.')
+                with response:
                     videos=json.load(response)['videos']
                     db.execute('UPDATE pexels_consultas SET restante=?,reinicio=? WHERE rowid=?',(response.headers.get('X-Ratelimit-Remaining'),response.headers.get('X-Ratelimit-Reset'),rid))
             except urllib.error.HTTPError as e:
@@ -101,8 +112,27 @@ def visual(db,pid,i,scene,vertical):
             continue
         break
     else:
-        info=('Fundo sólido',None,None,None,None)
-        path=None
+        return None
+    return path,info
+
+
+def visual(db,pid,i,scene,vertical):
+    cfg=config()
+    cache=root()/'cache-stock'
+    cache.mkdir(exist_ok=True)
+    terms=scene['b_roll_busca'][:3]
+    asset=None
+    for term in terms:
+        asset=stock.attempt('Mixkit',stock.mixkit,cfg,term)
+        if not asset and cfg['PIXABAY_API_KEY']:
+            asset=stock.attempt('Pixabay',stock.pixabay,cfg,cache,term,vertical)
+        if not asset and cfg['PEXELS_API_KEY']:
+            asset=stock.attempt('Pexels',pexels,db,pid,i,{'b_roll_busca':[term]},vertical)
+        if not asset:
+            asset=stock.attempt('Commons',stock.commons,cache,term)
+        if asset:
+            break
+    path,info=asset or (None,('Fundo sólido',None,None,None,None))
     db.execute('DELETE FROM assets_producao WHERE producao=? AND cena=?',(pid,i))
     db.execute('INSERT INTO assets_producao(producao,cena,origem,origem_id,url,autor,licenca,data) VALUES(?,?,?,?,?,?,?,?)',(pid,i,*info,time.time()))
     return str(path) if path else None
@@ -169,7 +199,28 @@ def process(db,work,job):
         source=['-stream_loop','-1','-i',video] if video else ['-f','lavfi','-i',f'color=c=0x253746:s={w}x{h}:r=25']
         frames=max(1,round(duration*25))
         filters=f"fps=25,scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1,zoompan=z='1+0.05*min(on/{frames},1)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s={w}x{h}:fps=25,eq=saturation=0.96,fade=in:0:4,fade=out:{max(0,frames-4)}:4"
-        ffmpeg([*source,'-i',name+'.wav','-t',str(duration),'-vf',filters,'-c:v','libx264','-preset','veryfast','-pix_fmt','yuv420p','-c:a','aac',name+'.mp4'],media)
+        inputs=[*source,'-i',name+'.wav']
+        mapping=['-map','0:v:0','-map','1:a:0']
+        cfg=config()
+        term=scene.get('som_ambiente',scene['b_roll_busca'][0]+' ambience')
+        if cfg['AMBIENCIA'].lower() not in ('off','0') and isinstance(term,str) and term.strip():
+            cache=root()/'cache-stock'
+            cache.mkdir(exist_ok=True)
+            sound=None
+            if cfg['FREESOUND_API_KEY']:
+                sound=stock.attempt('Freesound',stock.freesound,cfg,cache,term)
+            if not sound:
+                sound=stock.attempt('Commons',stock.commons,cache,term,True)
+            db.execute("DELETE FROM assets_producao WHERE producao=? AND cena=? AND origem LIKE 'Ambiência · %'",(pid,i))
+            if sound:
+                path,(provider,ident,url,author,license)=sound
+                inputs+=['-stream_loop','-1','-i',str(path)]
+                fade=min(0.5,duration/2)
+                graph=f'[2:a]volume=0.08,afade=t=in:d={fade},afade=t=out:st={duration-fade}:d={fade}[bed];[1:a][bed]amix=inputs=2:duration=first:normalize=0[a]'
+                mapping=['-filter_complex',graph,'-map','0:v:0','-map','[a]']
+                db.execute('INSERT INTO assets_producao(producao,cena,origem,origem_id,url,autor,licenca,data) VALUES(?,?,?,?,?,?,?,?)',
+                           (pid,i,'Ambiência · '+provider,ident,url,author,license,time.time()))
+        ffmpeg([*inputs,*mapping,'-t',str(duration),'-vf',filters,'-c:v','libx264','-preset','veryfast','-pix_fmt','yuv420p','-c:a','aac',name+'.mp4'],media)
     elif stage=='legendas':
         duration=audio_seconds(media/(name+'.wav'))
         (media/(name+'.srt')).write_text(srt(scene['narracao'],duration))

@@ -126,7 +126,7 @@ def enqueue(db,ident,stage,order=0):
 def config():
     import os
     from pathlib import Path
-    names=('OLLAMA_URL','ROTEIRO_MODELO','PIPER_MODEL_PATH','PEXELS_API_KEY','FFMPEG_THREADS','DIRETORIO_PRODUCAO','ESPACO_MINIMO_GB')
+    names=('OLLAMA_URL','ROTEIRO_MODELO','PIPER_MODEL_PATH','PEXELS_API_KEY','PIXABAY_API_KEY','FREESOUND_API_KEY','MIXKIT_CATALOG','AMBIENCIA','FFMPEG_THREADS','DIRETORIO_PRODUCAO','ESPACO_MINIMO_GB')
     values={}
     for file in ('.env','.env.production','.env.local'):
         if Path(file).is_file():
@@ -184,7 +184,7 @@ def stage(db,work,job):
         next_stage=('escrita',0)
     elif kind=='escrita':
         scene=plan[0][order]
-        result=ask('Escreva esta cena. Retorne {narracao,resumo,legenda_destaque,estilo_visual,fontes,verificar}. Respeite a duração a cento e quarenta palavras por minuto.',
+        result=ask('Escreva esta cena. Retorne {narracao,resumo,legenda_destaque,estilo_visual,som_ambiente,fontes,verificar}. Em som_ambiente sugira uma busca curta em inglês para o ambiente sonoro apropriado ao clima desta cena, por exemplo light rain ambience, ou deixe vazio para silêncio. Respeite a duração a cento e quarenta palavras por minuto.',
                    dict(briefing=b,cena=scene,resumos=[s['resumo'] for s in previous('escrita')][-12:]))
         result.update(id=f'c{order+1:02d}',tipo=scene['tipo'],duracao_segundos=scene['duracao_segundos'])
         for key in ('narracao','resumo','legenda_destaque','estilo_visual'):
