@@ -14,3 +14,14 @@ Execute na raiz do Studio com `python3 -m studio.benchmark_roteiros TAG`. O resu
 O Qwen terminou a primeira amostra em 271,89 segundos e devolveu cinco cenas. A narração ficou abaixo do alvo de 130 palavras. A frase sobre uma caminhada de cinco quilômetros veio sem fonte e sem sinalização. A revisão humana precisa conferir tanto a duração quanto os fatos.
 
 A primeira leitura de memória considerava apenas processos com nome iniciado por ollama. Na VPS, o processo de inferência se chama llama-server. O medidor corrigido inclui todos os processos do grupo do serviço. O pico histórico do grupo, 5.287.677.952 bytes na consulta, abrange mais de uma execução e não serve para aprovar um candidato individualmente. A escolha permanece pendente dos resultados individuais corrigidos.
+
+### Comparação concluída na Contabo
+
+| Modelo | Tempo do briefing | Pico de memória residente | CPU média |
+|---|---:|---:|---:|
+| Qwen2.5 7B | 223,68 s | 4.956.442.624 bytes | 184,5% |
+| Mistral 7B Instruct | 304,11 s | 4.736.000.000 bytes | 182,2% |
+
+Escolha para a primeira implantação: Qwen2.5 7B. A amostra retornou a chave de cenas solicitada e levou cerca de oitenta segundos a menos. A amostra do Mistral usou a chave roteiro e apresentou um erro de grafia. Ambos ficaram abaixo do limite de 6,5 GB. Os percentuais de CPU correspondem a aproximadamente 1,8 núcleo ocupado. Os tempos cobrem uma única resposta de teste. O fluxo do painel faz várias chamadas por roteiro e pode aguardar a vez entre as cenas.
+
+A swap chegou perto de esgotar durante os testes. Na VPS com outros serviços ativos, manter o modelo com duas threads, contexto de 2048 e descarga ao fim de cada chamada. A revisão humana precisa conferir as afirmações sem fonte e a duração estimada.
