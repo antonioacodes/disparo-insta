@@ -85,3 +85,61 @@ class RoteirosTest(unittest.TestCase):
                 finally:
                     fcntl.flock(held,fcntl.LOCK_UN)
                 self.assertEqual(proc.communicate(timeout=5)[0].strip(),'entrou')
+
+    def test_complete_pipeline_with_simulated_providers(self):
+        import wave
+        responses=[
+            {'cenas':[{'tipo':'gancho','objetivo':'encontrar o objeto','duracao_segundos':3}]},
+            {'narracao':'O guarda-chuva ficou aqui.', 'resumo':'O encontro.',
+             'legenda_destaque':'O guarda-chuva','estilo_visual':'parque','fontes':[],'verificar':True},
+            {'termos':['yellow umbrella']},{'valor':['Guarda-chuva']},{'valor':['Um encontro']},
+            {'valor':'Uma história curta.'},{'valor':['ficção']}
+        ]
+        def next_job():
+            job=self.db.execute("SELECT * FROM jobs WHERE state='queued' ORDER BY id LIMIT 1").fetchone()
+            if job:
+                self.db.execute("UPDATE jobs SET state='running' WHERE id=?",(job['id'],))
+            return job
+
+        def finish(job):
+            self.db.execute("UPDATE jobs SET state='done' WHERE id=?",(job['id'],))
+
+        with patch.object(roteiros,'generate',side_effect=responses) as model:
+            roteiros.enqueue(self.db,self.ident,'planejamento')
+            while job:=next_job():
+                roteiros.stage(self.db,self.folder,job)
+                finish(job)
+            self.assertEqual(model.call_count,len(responses))
+        self.assertEqual(roteiros.command(self.db,'list','',{})[0]['status'],'aguardando_aprovacao')
+        roteiros.command(self.db,'aprovar',self.ident,{'revisado':True})
+        voice=self.folder/'voice.onnx'
+        voice.touch()
+        def piper(args,**options):
+            with wave.open(args[-1],'wb') as stream:
+                stream.setparams((1,2,16000,0,'NONE',''))
+                stream.writeframes(bytes(2*16000*3))
+        def render(args,folder):
+            (folder/args[-1]).touch()
+        cfg={'DIRETORIO_PRODUCAO':str(self.folder/'out'),'ESPACO_MINIMO_GB':'0',
+             'PIPER_MODEL_PATH':str(voice)}
+        with patch.object(producao,'config',return_value=cfg), patch.object(producao,'visual',return_value=None) as broll, patch.object(producao.subprocess,'run',side_effect=piper) as narration, patch.object(producao,'ffmpeg',side_effect=render):
+            roteiros.command(self.db,'produzir',self.ident,{})
+            while job:=next_job():
+                producao.process(self.db,self.folder,job)
+                finish(job)
+            report=producao.review(self.db,self.ident)
+            self.assertTrue(report['pronto'])
+            self.assertIn('00:00:03,000',report['legendas'][0]['srt'])
+            roteiros.command(self.db,'regenerar',self.ident,dict(cena=0,parte='legendas',comentario='Revisão'))
+            stages=[]
+            while job:=next_job():
+                stages.append(job['entity'].split(':')[1])
+                producao.process(self.db,self.folder,job)
+                finish(job)
+            self.assertEqual(stages,['legendas','finalizar'])
+            self.assertEqual(broll.call_count,1)
+            self.assertEqual(narration.call_count,1)
+            roteiros.command(self.db,'aprovar-video',self.ident,dict(rotulagem_ia=True,revisado=True))
+            self.assertTrue((producao.root()/self.ident/'final.mp4').is_file())
+            self.assertEqual(roteiros.command(self.db,'list','',{})[0]['status'],'aprovado_para_publicacao')
+            self.assertIsNone(next_job())

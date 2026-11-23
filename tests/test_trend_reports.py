@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 from studio.trend_ranking import rank, duration, period
 from io import BytesIO
+from pathlib import Path
+import tempfile
 import sqlite3
 import unittest
 from unittest.mock import patch
@@ -10,7 +12,9 @@ from studio import trends
 
 class Reports(unittest.TestCase):
     def setUp(self):
-        self.db = sqlite3.connect(':memory:', isolation_level=None)
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.db = sqlite3.connect(Path(folder.name)/'studio.sqlite', isolation_level=None)
         self.db.row_factory = sqlite3.Row
         trends.init(self.db)
         config = dict.fromkeys(trends.KEYS, 'test')
