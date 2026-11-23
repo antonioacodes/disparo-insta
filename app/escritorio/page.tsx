@@ -57,7 +57,6 @@ export default function Office(){
   const canvas=useRef<HTMLCanvasElement>(null);
   const position=useRef<Point>(map.spawn), route=useRef<Point[]>([]), held=useRef<Point|null>(null);
   const facing=useRef('down'),distance=useRef(0),walking=useRef(false);
-  const [scale,setScale]=useState(1);
   const [avatar,move]=useState(map.spawn),[room,select]=useState<number|null>(null);
   const [week,setWeek]=useState(false),[today,setToday]=useState<Date|null>(null),[frame,tick]=useState(0);
   useEffect(()=>{
@@ -75,22 +74,7 @@ export default function Office(){
   const pending=rooms.reduce((n,r)=>n+r.count,0);
   const total=done+pending+rooms.filter(r=>r.working).length;
   const dialog=useRef<HTMLDialogElement>(null);
-  const viewport=useRef<HTMLDivElement>(null);
   const width=map.tiles[0].length*size,height=map.tiles.length*size;
-  useEffect(()=>{
-    const el=viewport.current!;
-    const resize=new ResizeObserver(()=>{
-      const zoom=Math.max(2,Math.ceil(Math.max(el.clientWidth/width,el.clientHeight/height)));
-      setScale(zoom);
-    });
-    resize.observe(el);
-    return ()=>resize.disconnect();
-  },[width,height]);
-  useEffect(()=>{
-    const el=viewport.current!;
-    el.scrollLeft=(el.scrollWidth-el.clientWidth)/2;
-    el.scrollTop=Math.max(0,(position.current.y+0.5)*size*scale-el.clientHeight/2);
-  },[scale]);
   useEffect(()=>{if(room!==null){route.current=route.current.slice(0,1);held.current=null;dialog.current?.showModal()}else dialog.current?.close()},[room]);
   useEffect(()=>{
     let id=0,previous=0;
@@ -108,12 +92,7 @@ export default function Office(){
         const n=advance>=len?target:{x:p.x+dx*advance/len,y:p.y+dy*advance/len};
         if(advance>=len)route.current.shift();
         distance.current+=advance;walking.current=true;position.current=n;move(n);
-        const el=viewport.current,scene=canvas.current;
-        if(el&&scene){
-          const rect=scene.getBoundingClientRect(),view=el.getBoundingClientRect();
-          const x=rect.left+(n.x+.5)*rect.width/map.tiles[0].length,y=rect.top+(n.y+.5)*rect.height/map.tiles.length;
-          el.scrollBy(x-Math.max(view.left+30,Math.min(view.right-30,x)),y-Math.max(view.top+30,Math.min(view.bottom-30,y)));
-        }
+
       }else if(walking.current){walking.current=false;move({...p})}
       previous=now;id=requestAnimationFrame(animate);
     }
@@ -169,7 +148,7 @@ export default function Office(){
     <nav aria-label="Progresso por agente">{rooms.map((r,i)=><button key={r.name} onClick={()=>select(i)}><i style={{background:r.color}}/>{r.person} · {r.done}/{r.done+r.count+Number(r.working)}</button>)}
     <button onClick={()=>select(-1)}>Central de operações ↗</button><Ambience/></nav></header>
     {assetError&&<p role="alert">Falha ao carregar a arte do escritório. Recarregue a página.</p>}
-    <div className={styles.viewport} ref={viewport}><div className={styles.world} style={{width:width*scale,height:height*scale,minHeight:0}}>
+    <div className={styles.viewport}><div className={styles.world} style={{width:`min(100cqw, ${100*width/height}cqh)`,aspectRatio:`${width}/${height}`}}>
     <canvas ref={canvas} tabIndex={0} aria-label="Mapa do escritório. Use setas ou WASD para andar, Enter para interagir ou toque no chão." width={width} height={height}
       onKeyDown={e=>{
         if(e.key==='Enter'){
