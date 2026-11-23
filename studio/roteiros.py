@@ -236,6 +236,9 @@ def command(db,action,ident,payload):
     try:
         if action=='briefing':
             ident=create(db,payload)
+        elif action=='produzir':
+            from studio.producao import begin
+            begin(db,ident)
         elif action=='gerar':
             if not config()['ROTEIRO_MODELO']:
                 raise ValueError('Modelo de roteiro ainda não configurado.')

@@ -14,7 +14,7 @@ import urllib.request
 from pathlib import Path
 
 from studio.delete_project import delete_project
-from studio import trends, roteiros
+from studio import trends, roteiros, producao
 from studio.model_slot import model_slot
 from studio.background import EditingPending, run_background
 from studio.cache import maintain, remove_preview, RETENTION
@@ -457,7 +457,10 @@ def run_script_stage(job,etapa):
     beat=threading.Thread(target=signal,daemon=True)
     beat.start()
     try:
-        roteiros.stage(db,WORK,job)
+        if job["kind"]=="producao":
+            producao.process(db,WORK,job)
+        else:
+            roteiros.stage(db,WORK,job)
     finally:
         stop.set()
         beat.join()
@@ -494,9 +497,9 @@ def worker():
                     continue
                 db.execute("DELETE FROM job_progress WHERE job=?", (job["id"],))
                 try:
-                    if job["kind"] == "roteiro":
+                    if job["kind"] in ("roteiro","producao"):
                         etapa=job["entity"].split(":")[1]
-                        progress("roteiro",job["entity"],etapa.capitalize())
+                        progress(job["kind"],job["entity"],etapa.capitalize())
                         run_script_stage(job,etapa)
                     elif job["kind"] == "purge":
                         delete_project(db, WORK, job["entity"])
@@ -525,7 +528,9 @@ def worker():
                     db.execute("UPDATE jobs SET state='done' WHERE id=?", (job["id"],))
                 except Exception as exc:
                     db.rollback()
-                    if job['kind']=='roteiro':
+                    if job['kind']=='producao':
+                        db.execute("UPDATE producoes_video SET etapa='erro',erro=? WHERE id=?",(str(exc)[:500],job['entity'].split(':')[0]))
+                    if job['kind'] in ('roteiro','producao'):
                         db.execute("UPDATE roteiros SET status='erro',comentario=? WHERE id=?",(str(exc)[:500],job['entity'].split(':')[0]))
                     db.execute("UPDATE jobs SET state='failed',error=? WHERE id=?", (str(exc)[-500:],job["id"]))
 
@@ -536,6 +541,7 @@ if __name__ == "__main__":
     opts = parser.parse_args()
     trends.init(db)
     roteiros.init(db)
+    producao.init(db)
     if opts.action == "roteiros":
         try:
             print(json.dumps(roteiros.command(db,opts.args[0],opts.args[1],json.loads(opts.args[2]) if len(opts.args)>2 else {})))
