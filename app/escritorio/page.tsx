@@ -211,8 +211,21 @@ export default function Office(){
       const occupied=[avatar,...people].some(p=>p.x+.5>=zone.x&&p.x+.5<zone.x+zone.w&&
         p.y+.5>=zone.y&&p.y+.5<zone.y+zone.h);
       const left=zone.x*size,top=zone.y*size,w=zone.w*size,h=zone.h*size;
-      ctx.fillStyle=occupied?'rgba(255,218,148,.065)':'rgba(26,36,62,.46)';
-      ctx.fillRect(left,top,w,h);
+      if(occupied){
+        ctx.fillStyle='rgba(255,218,148,.065)';
+        ctx.fillRect(left,top,w,h);
+      }else{
+        ctx.save();
+        ctx.translate(left+w/2,top+h/2);
+        ctx.scale(w/2,h/2);
+        const shade=ctx.createRadialGradient(0,0,0,0,0,1);
+        shade.addColorStop(0,'rgba(26,36,62,.46)');
+        shade.addColorStop(.55,'rgba(26,36,62,.29)');
+        shade.addColorStop(1,'rgba(26,36,62,0)');
+        ctx.fillStyle=shade;
+        ctx.fillRect(-1,-1,2,2);
+        ctx.restore();
+      }
       // A small wall sconce makes the switch visible even on similar floor colors.
       const lampX=left+w-18;
       ctx.fillStyle='#4d514c';ctx.fillRect(lampX,top+1,12,4);
