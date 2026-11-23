@@ -1,6 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
-import {EditingStyle,defaults} from '../EditingStyle';
+import {EditingStyle,defaults,type StyleStep} from '../EditingStyle';
 import {ProjectName,SourcePicker} from '../ProjectFields';
 
 async function uploadFile(file:File,notify:(message:string)=>void){
@@ -19,10 +19,17 @@ async function uploadFile(file:File,notify:(message:string)=>void){
   throw Error('O envio terminou sem um arquivo de vídeo disponível.');
 }
 
-export function ProjectIntake({onCreated,useStored=false}:{onCreated:(id:string)=>void;useStored?:boolean}){
+export function ProjectIntake({onCreated,useStored=false,guided=false}:{onCreated:(id:string)=>void;useStored?:boolean;guided?:boolean}){
   const [mode,setMode]=useState('file'),[name,setName]=useState(''),[url,setUrl]=useState('');
   const [stored,setStored]=useState(''),[file,setFile]=useState<File|null>(null),[preset,setPreset]=useState(defaults);
   const [busy,setBusy]=useState(false),[message,notify]=useState('');
+  type Step='name'|StyleStep|'source';
+  const steps:Step[]=['name','format','cuts','captions'];
+  if(['generate','auto'].includes(preset.captions))steps.push('font','animation');
+  steps.push('facecam','motion','source');
+  const [step,setStep]=useState<Step>('name');
+  const index=steps.indexOf(step);
+  const canAdvance=step==='name'?!!name.trim():step!=='cuts'||preset.clipCount==='max'||/^[1-9][0-9]*$/.test(preset.clipCount);
   useEffect(()=>{if(useStored)setStored(new URLSearchParams(location.search).get('media')||'')},[useStored]);
   async function submit(existing=false){
     if(busy)return;
@@ -43,14 +50,19 @@ export function ProjectIntake({onCreated,useStored=false}:{onCreated:(id:string)
     }catch(error){notify(error instanceof Error?error.message:'Falha ao processar o vídeo.')}
     finally{setBusy(false)}
   }
-  return <form onSubmit={e=>{e.preventDefault();void submit()}}>
+  return <form onSubmit={e=>{e.preventDefault();if(guided&&step!=='source'){if(canAdvance)setStep(steps[index+1])}else void submit()}}>
     <fieldset disabled={busy} style={{border:0,padding:0,minWidth:0}}>
-      <ProjectName value={name} onChange={setName}/><EditingStyle value={preset} onChange={setPreset}/>
+      {guided&&<><p aria-live="polite">Etapa {index+1} de {steps.length} · {step==='name'?'Identificação':step==='source'?'Vídeo de origem':'Estilo do projeto'}</p><progress aria-label="Etapas do projeto" value={index+1} max={steps.length}/></>}
+      {(!guided||step==='name')&&<ProjectName required={guided} value={name} onChange={setName}/>}
+      {(!guided||(step!=='name'&&step!=='source'))&&<EditingStyle value={preset} onChange={setPreset} step={guided?step as StyleStep:undefined}/>}
+      {(!guided||step==='source')&&<>
       {stored&&<button type="button" className="btn" onClick={()=>void submit(true)}>Gerar cortes do arquivo armazenado</button>}
       <p>Envie um conteúdo próprio ou autorizado.</p>
       <div className="choiceRow">{[['file','Selecionar arquivo'],['link','Inserir link']].map(([key,label])=><button key={key} type="button" aria-pressed={mode===key} onClick={()=>setMode(key)}>{label}</button>)}</div>
       {mode==='file'?<SourcePicker file={file} onChange={setFile} disabled={busy}/>:<label className="studioField">Link do vídeo<input type="url" pattern="https://.+" required value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://…"/></label>}
-      <button className="btn" disabled={busy||(mode==='file'?!file:!url.trim())}>{busy?'Processando…':mode==='file'?'Enviar e processar':'Importar e gerar cortes'}</button>
+      </>}
+      {guided&&index>0&&<button className="btn secondary" type="button" onClick={()=>setStep(steps[index-1])}>Voltar</button>}
+      {guided&&step!=='source'?<button className="btn" disabled={!canAdvance}>Continuar</button>:<button className="btn" disabled={busy||(mode==='file'?!file:!url.trim())}>{busy?'Processando…':mode==='file'?'Enviar e processar':'Importar e gerar cortes'}</button>}
     </fieldset><p role="status">{message}</p>
   </form>
 }

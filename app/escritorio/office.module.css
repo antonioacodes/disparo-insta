@@ -45,3 +45,15 @@
 .board .ready{color:#aff0bd}.dialog{width:min(650px,94vw);overscroll-behavior:contain}
 .dialog button:not([aria-label="Fechar detalhes"]){float:none;border-radius:8px;width:auto;height:auto;font-size:inherit}
 .dialog details{padding:8px 0}.dialog summary{cursor:pointer}.dialog video{display:block;width:100%;max-height:44vh;background:#171523;margin:8px 0}
+.tag strong{display:inline-flex;align-items:center;justify-content:center;gap:5px}
+.tag i[data-state=waiting]{background:#edbd60}
+.actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(175px,100%),1fr));gap:12px;margin-top:18px}
+.dialog .actions button{display:grid;gap:6px;text-align:left;padding:18px;color:#243442;background:white;border:1px solid #aab9b2;cursor:pointer}
+.actions button:hover,.actions button:focus-visible{border-color:#478376;background:#eef7f3}
+.actions strong{font-size:18px}.actions small{color:#50636b}.returnButton{padding:6px 10px;margin-bottom:10px}
+.identity{display:flex;align-items:center;gap:7px;font-size:14px;margin:0 0 15px}.identity b{margin-right:5px}
+.statusIcon{display:inline-block;flex:none;width:9px;height:9px;border-radius:50%;background:#99a3a8}
+.statusIcon[data-state=working]{background:#41be75}.statusIcon[data-state=idle]{background:transparent;box-shadow:inset -4px -2px #ecb541}
+.statusIcon[data-state=waiting]{background:#d7a541}.statusIcon[data-state=error]{background:#d65b55}
+.dialog form progress{width:100%;height:5px;accent-color:#46877a;display:block;margin:4px 0 14px}
+.dialog .actions button:focus-visible,.dialog .actions button:hover{outline:2px solid #478376;outline-offset:1px}

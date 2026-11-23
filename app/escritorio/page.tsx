@@ -5,6 +5,7 @@ import styles from './office.module.css';
 import map from './map.json';
 import {useOffice} from './useOffice';
 import {ProjectIntake} from '../studio/reaproveitar/ProjectIntake';
+import {Department,ActionCard,StatusIcon} from './Department';
 import {Ambience} from './Ambience';
 import {loadScene} from './assets';
 
@@ -12,24 +13,6 @@ type Point = {x:number;y:number};
 const size=32;
 const directions:Record<string,Point>={ArrowUp:{x:0,y:-1},ArrowDown:{x:0,y:1},ArrowLeft:{x:-1,y:0},ArrowRight:{x:1,y:0}};
 const aliases:Record<string,string>={w:'ArrowUp',a:'ArrowLeft',s:'ArrowDown',d:'ArrowRight'};
-// Each short excursion ends at the rest spot before a new destination is chosen.
-function usePatrol(){
-  const [offset,setOffset]=useState({x:0,y:0});
-  useEffect(()=>{
-    if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
-    let frame=0,start=performance.now(),dx=0,dy=0;
-    function step(now:number){
-      const t=(now-start)/1000;
-      if(t>=6){start=now;[dx,dy]=[[1,0],[-1,0],[0,1]][Math.floor(Math.random()*3)]}
-      const k=Math.max(0,Math.min(1,(t-1.4)/.8,(5.4-t)/.8));
-      const x=k*dx,y=k*dy;
-      setOffset(old=>old.x===x&&old.y===y?old:{x,y});
-      frame=requestAnimationFrame(step);
-    }
-    frame=requestAnimationFrame(step);return ()=>cancelAnimationFrame(frame);
-  },[]);
-  return offset;
-}
 const same=(a:Point,b:Point)=>a.x===b.x && a.y===b.y;
 function OfficeVideo({id,kind}:{id:string;kind:string}){
   return <video controls playsInline preload="none" aria-label="Reproduzir corte" src={'/api/studio/workflow/video?id='+encodeURIComponent(id)+'&kind='+kind}/>;
@@ -81,14 +64,17 @@ export default function Office(){
     const status=i!==0?'Ainda não configurado':failed?'Sem conexão':data?.status??'Conectando';
     return {...r,status,working:status==='Trabalhando'};
   });
-  const patrol=usePatrol();
-  const people=rooms.map(r=>({...r,x:r.working?r.seat.x:r.x+(r.status==='Ocioso'?patrol.x:0),y:r.working?r.seat.y:r.y}));
+  const people=rooms.map(r=>{
+    const seated=r.working||r.status==='Ocioso';
+    return {...r,seated,...(seated?r.seat:{x:r.x,y:r.y})};
+  });
   const total=done+pending+Number(rooms[0].working);
   const ready=data?.ready??[];
   const current=data?.current;
   const prediction=data?.prediction;
   const eta=prediction?'≈ '+Math.max(1,Math.ceil(prediction.remaining/60))+' min':'Estimando tempo';
   const elapsed=current?.started?Math.max(0,Math.floor(Date.now()/1000-current.started)):0;
+  const [view,setView]=useState<'home'|'edit'|'ready'|'info'>('home');
   const [newProject,setNewProject]=useState('');
   function details(index:number){
     if(index!==0)return <span>Integração de {rooms[index].name.toLowerCase()} ainda não disponível.</span>;
@@ -132,13 +118,12 @@ export default function Office(){
     if(!scene)return;
     const {width:cols,height:rows,layers}=scene.map;
     const entities=people.map((r,i)=>({x:r.x,y:r.y,draw:()=>{
-      const stroll=!Number.isInteger(r.x)||!Number.isInteger(r.y);
-      if(r.working){
+      if(r.seated){
         // The north-facing backrest is between the viewer and the seated agent.
-        scene.actor(ctx,i,r.x,r.y-0.54,'up','Digitar',frame);
+        scene.actor(ctx,i,r.x,r.y-0.54,'up',r.working?'Digitar':'Sentar',frame);
         scene.tile(ctx,18,r.x,r.y);
       }else{
-        scene.actor(ctx,i,r.x,r.y,stroll?(frame<11?'right':'left'):'down',stroll?'Andar':'Café',frame);
+        scene.actor(ctx,i,r.x,r.y,'down','Café',frame);
       }
     }}));
     entities.push({x:avatar.x,y:avatar.y,draw:()=>scene.actor(ctx,3,avatar.x,avatar.y,facing.current,walking.current?'Andar':'Parado',walking.current?Math.floor(distance.current*8):frame)});
@@ -164,7 +149,7 @@ export default function Office(){
       ctx.fillStyle='#ffefd4';ctx.fillRect(r.signX*size-28,r.signY*size+1,80,14);
       ctx.fillStyle='#384553';ctx.fillText(r.name,r.signX*size+12,r.signY*size+12);
     });
-  },[avatar,frame,scene,patrol,data,failed]);
+  },[avatar,frame,scene,data,failed]);
   const anchor=(x:number,y:number)=>({left:(x+.5)*size/width*100+'%',top:y*size/height*100+'%'});
   return <main className={styles.office} aria-label="Escritório virtual">
     <header className={styles.hud}><Link href="/studio" className={styles.back} aria-label="Voltar ao Studio" title="Voltar ao Studio">←</Link>
@@ -212,8 +197,8 @@ export default function Office(){
         route.current=[...first,...(solid?path(first[0]||position.current,p,solid):[])];
       }}/>
     {people.map((r,i)=><div key={r.name}>
-      <button className={styles.person} aria-label={r.person+" · "+r.name} style={anchor(r.x,r.y+(r.working?-.8:-.5))} onClick={()=>select(i)}>
-        <span className={styles.tag}><strong>{r.person}</strong>{r.working&&<>
+      <button className={styles.person} aria-label={r.person+" · "+r.name} style={anchor(r.x,r.y+(r.seated?-.8:-.5))} onClick={()=>select(i)}>
+        <span className={styles.tag}><strong title={r.status}><StatusIcon status={r.status}/>{r.person}</strong>{r.working&&<>
           <small>Trabalhando · {eta}</small>
           <progress aria-label="Progresso estimado da tarefa" value={prediction?.percent} max={100}
             style={{accentColor:!prediction||prediction.percent<35?'#ef6464':prediction.percent<75?'#f5c94f':'#61d58b'}}/>
@@ -228,13 +213,22 @@ export default function Office(){
       <b>Central de operações</b>{ready.length>0&&<span className={styles.ready}>{ready.length} {ready.length===1?'vídeo pronto':'vídeos prontos'}</span>}
 
     </button></div></div>
-    <dialog ref={dialog} onClose={()=>select(null)} className={styles.dialog}>
+    <dialog ref={dialog} onClose={()=>{select(null);setView('home');setNewProject('')}} className={styles.dialog}>
       <button autoFocus onClick={()=>select(null)} aria-label="Fechar detalhes">×</button>
-      <h2>{room===-1?'Central de operações':rooms[room??0].name}</h2>
-      {rooms.map((r,i)=>(room===-1||room===i)&&<section key={r.name} className={styles.detail}><h3>{r.person} · {r.name}</h3>{details(i)}</section>)}
-      {room===0&&<details><summary>Enviar vídeo para edição</summary><ProjectIntake onCreated={setNewProject}/></details>}
-      {room===0&&newProject&&<p role="status">Projeto enviado. Acompanhe a fila acima.</p>}
-      {(room===0||room===-1)&&<section><h3>Vídeos prontos {data&&'· '+ready.length}</h3>
+      {room===-1&&<><h2>Central de operações</h2>{rooms.map((r,i)=><section key={r.name} className={styles.detail}><h3>{r.person} · {r.name}</h3>{details(i)}</section>)}</>}
+      {room!==null&&room>=0&&<Department {...rooms[room]} onBack={view==='home'?undefined:()=>setView('home')}>
+        {view==='home'&&<>
+          {room===0&&<p>{current?.stage||current?.label||(data?'Sem tarefa em execução':'Consultando a fila…')}{data&&' · '+pending+' na fila'}</p>}
+          <div className={styles.actions}>{room===0?<>
+            <ActionCard title="Edição" caption="Criar um projeto" onClick={()=>{setNewProject('');setView('edit')}}/>
+            <ActionCard title="Vídeos prontos" caption={data?ready.length+' disponíveis':'Consultar vídeos'} onClick={()=>setView('ready')}/>
+          </>:<ActionCard title="Integração" caption="Consultar disponibilidade" onClick={()=>setView('info')}/>}</div>
+          {room===0&&newProject&&<p role="status">Projeto enviado para a fila de edição.</p>}
+        </>}
+        {view==='info'&&<section className={styles.detail}><h3>Disponibilidade</h3>{details(room)}</section>}
+        {room===0&&view==='edit'&&<ProjectIntake guided onCreated={id=>{setNewProject(id);setView('home')}}/>}
+      </Department>}
+      {(room===0&&view==='ready'||room===-1)&&<section><h3>Vídeos prontos {data&&'· '+ready.length}</h3>
         {!data?<p>{failed?'Não foi possível consultar o Studio.':'Consultando o Studio…'}</p>:ready.length===0?<p>A primeira prévia aparecerá aqui assim que estiver disponível.</p>:ready.map(c=><details key={c.id}><summary>{c.projectTitle} · {c.title}</summary>
           <OfficeVideo id={c.id} kind={c.kind}/><Link href={{pathname:'/studio',query:{project:c.project}}}>Abrir revisão no Studio</Link></details>)}</section>}
     </dialog></main>

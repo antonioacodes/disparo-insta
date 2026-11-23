@@ -2,7 +2,8 @@
 import {Info, Scissors} from 'lucide-react';
 import {useState} from 'react';
 export const defaults={highlight:'#FFD700',motion:'off',clipCount:'10',format:'vertical',captions:'generate',facecam:'off',font:'DejaVu Sans',animation:'off'};
-export function EditingStyle({value,onChange}:{value:typeof defaults;onChange:(v:typeof defaults)=>void}){
+export type StyleStep='format'|'captions'|'facecam'|'motion'|'animation'|'cuts'|'font';
+export function EditingStyle({value,onChange,step}:{value:typeof defaults;onChange:(v:typeof defaults)=>void;step?:StyleStep}){
   const [expanded,expand]=useState(false);
   const notes:Record<string, Record<string,string>>={
     motion:{
@@ -35,21 +36,21 @@ export function EditingStyle({value,onChange}:{value:typeof defaults;onChange:(v
     ['motion','Ritmo da edição',[['off','Original'],['visual','Ênfase visual'],['sound','Ênfase visual + som']]],
     ['animation','Animação de texto',[['off','Estática'],['fade','Entrada suave'],['karaoke','Karaokê']]]
   ] as const;
-  return <section className="editStyle"><h2>Estilo do projeto</h2>{choices.filter(([key])=>key!=='animation'||['generate','auto'].includes(value.captions)).map(([key,label,items])=><fieldset key={key}><legend>{label}</legend><div className="choiceRow">{items.map(([id,name])=><button type="button" aria-pressed={value[key]===id} key={id} onClick={()=>onChange({...value,[key]:id})}>{name}</button>)}</div><div className="styleNote" role="status"><Info size={17} aria-hidden="true"/><span>{notes[key][value[key]]}</span></div></fieldset>)}
-  {value.animation==='karaoke' && ['generate','auto'].includes(value.captions) && <fieldset>
+  return <section className="editStyle">{!step&&<h2>Estilo do projeto</h2>}{choices.filter(([key])=>(!step||step===key)&&(key!=='animation'||['generate','auto'].includes(value.captions))).map(([key,label,items])=><fieldset key={key}><legend>{label}</legend><div className="choiceRow">{items.map(([id,name])=><button type="button" aria-pressed={value[key]===id} key={id} onClick={()=>onChange({...value,[key]:id})}>{name}</button>)}</div><div className="styleNote" role="status"><Info size={17} aria-hidden="true"/><span>{notes[key][value[key]]}</span></div></fieldset>)}
+  {(!step||step==='animation') && value.animation==='karaoke' && ['generate','auto'].includes(value.captions) && <fieldset>
     <legend>Cor de destaque da palavra</legend>
     <label className="studioTextInput"><input type="color" aria-label="Cor de destaque" style={{width:48,height:36}} value={value.highlight} onChange={e=>onChange({...value,highlight:e.target.value})}/>{value.highlight.toUpperCase()}</label>
     <div className="captionSample" style={{fontFamily:value.font}}><span>A palavra <strong style={{color:value.highlight,fontSize:'115%'}}>falada</strong> ganha destaque.</span></div>
   </fieldset>}
-  <fieldset><legend>Quantidade de cortes</legend>
+  {(!step||step==='cuts')&&<fieldset><legend>Quantidade de cortes</legend>
     <div className="choiceRow">
       <button type="button" aria-pressed={value.clipCount!=='max'} onClick={()=>onChange({...value,clipCount:value.clipCount==='max'?'10':value.clipCount})}>Escolher quantidade</button>
       <button type="button" aria-pressed={value.clipCount==='max'} onClick={()=>onChange({...value,clipCount:'max'})}>Máximo possível</button>
     </div>
     {value.clipCount!=='max' && <label className="studioField clipTarget"><span>Meta de cortes</span><span className="studioTextInput"><Scissors size={19} aria-hidden="true"/><input inputMode="numeric" type="number" min="1" step="1" value={value.clipCount} onChange={e=>onChange({...value,clipCount:e.target.value})} onBlur={()=>{if(!/^[1-9][0-9]*$/.test(value.clipCount))onChange({...value,clipCount:'10'})}}/></span></label>}
     <div className="styleNote"><Info size={17}/><span>{value.clipCount==='max'?'Seleciona todos os trechos aproveitáveis que podem virar cortes sem se sobrepor.':'O Studio tenta alcançar essa quantidade. Se houver poucos trechos completos, você receberá menos cortes.'}</span></div>
-  </fieldset>
-  <fieldset><legend>Fonte das legendas</legend><div className="captionSample" style={{fontFamily:'"'+value.font+'",sans-serif'}}><small>{value.font}</small>Esse momento merece um corte.</div>
+  </fieldset>}
+  {(!step||step==='font')&&<fieldset><legend>Fonte das legendas</legend><div className="captionSample" style={{fontFamily:'"'+value.font+'",sans-serif'}}><small>{value.font}</small>Esse momento merece um corte.</div>
   <div className="choiceRow">{["DejaVu Sans","Montserrat","Anton","Bebas Neue","Oswald","Poppins","Roboto Condensed","Barlow Condensed","Archivo Black","DM Sans","Space Grotesk","DejaVu Serif","Liberation Mono"].slice(0,expanded?99:6).map(font=><button type="button" style={{fontFamily:'"'+font+'",sans-serif'}} aria-pressed={value.font===font} key={font} onClick={()=>onChange({...value,font})}>{font}</button>)}</div>
-  <button type="button" onClick={()=>expand(!expanded)}>{expanded?'Mostrar menos':'Ver todas as fontes (13)'}</button></fieldset></section>
+  <button type="button" onClick={()=>expand(!expanded)}>{expanded?'Mostrar menos':'Ver todas as fontes (13)'}</button></fieldset>}</section>
 }
