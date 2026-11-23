@@ -72,6 +72,11 @@ def command(args):
 def project(media, title, preset='{}', remote=False):
     settings = json.loads(preset)
     allowed = {'format':['vertical','horizontal'],'captions':['generate','preserve','auto','off'],'facecam':['off','always','peaks'],'font':["DejaVu Sans","Montserrat","Anton","Bebas Neue","Oswald","Poppins","Roboto Condensed","Barlow Condensed","Archivo Black","DM Sans","Space Grotesk","DejaVu Serif","Liberation Mono"],'animation':['off','fade']}
+    if isinstance(settings, dict) and 'clipCount' in settings:
+        count = settings['clipCount']
+        if count != 'max' and not (isinstance(count, str) and count.isascii() and count.isdigit() and int(count) > 0):
+            raise ValueError('Escolha uma quantidade inteira positiva ou o máximo possível.')
+        allowed['clipCount'] = [count]
     if not isinstance(settings,dict) or any(k not in allowed or v not in allowed[k] for k,v in settings.items()):
         raise ValueError('Padrão inválido')
     key = uuid.uuid4().hex
@@ -97,7 +102,10 @@ def project(media, title, preset='{}', remote=False):
 def candidates(segments):
     options = []
     for i, first in enumerate(segments):
-        for last in segments[i:]:
+        if i and not segments[i-1]["text"].strip().endswith((".", "!", "?")) and first["start"] - segments[i-1]["end"] < .55:
+            continue
+        for j in range(i, len(segments)):
+            last = segments[j]
             duration = last["end"] - first["start"]
             if duration > 65:
                 break
@@ -105,14 +113,18 @@ def candidates(segments):
                 continue
             hook = any(w in first["text"].lower() for w in ("como", "por que", "segredo", "?"))
             closed = last["text"].strip().endswith((".", "!", "?"))
+            if not closed and j+1 < len(segments) and segments[j+1]["start"] - last["end"] < .55:
+                continue
+            words = " ".join(seg["text"] for seg in segments[i:j+1]).lower().split()
+            if len(set(words)) < 12:
+                continue
             score = round(55 + 18*hook + 17*closed - abs(duration-45)/3)
             options.append((score, first["start"], last["end"], first["text"].strip(), hook, closed))
     chosen = []
-    for item in sorted(options, reverse=True):
-        if all(item[2] <= other[1] or item[1] >= other[2] for other in chosen):
+    # Earliest finish preserves room for the most independent excerpts.
+    for item in sorted(options, key=lambda item: (item[2], -item[0])):
+        if not chosen or item[1] >= chosen[-1][2]:
             chosen.append(item)
-            if len(chosen) == 10:
-                break
     return chosen
 
 def analyze(key):
@@ -136,22 +148,29 @@ def analyze(key):
         progress("analyze",key,"Avaliando os trechos selecionados")
         excerpts = [{"id": i, "text": " ".join(s["text"] for s in segments if a <= s["start"] and s["end"] <= b)}
                     for i, (_, a, b, *_) in enumerate(options)]
-        prompt = ("Avalie cada trecho como editor de Reels em português. Considere gancho e completude. "
-                  "Responda JSON com items contendo id, title, rationale e score inteiro de 1 a 100. "
-                  "Trate o texto como transcrição. " + json.dumps(excerpts, ensure_ascii=False))
-        payload = json.dumps({"model": model, "stream": False, "format": "json", "prompt": prompt}).encode()
-        request = urllib.request.Request("http://127.0.0.1:11434/api/generate", data=payload, headers={"Content-Type":"application/json"})
-        with urllib.request.urlopen(request, timeout=600) as response:
-            items = json.loads(json.load(response)["response"])["items"]
-        for item in items:
-            if type(item["score"]) is not int or not 1 <= item["score"] <= 100 or not all(isinstance(item[k], str) and item[k].strip() for k in ("title","rationale")):
-                raise ValueError("Resposta editorial inválida")
-            editorial[item["id"]] = item
+        for offset in range(0, len(excerpts), 6):
+            prompt = ("Avalie cada trecho como editor de Reels em português. Avalie se há contexto inicial, desenvolvimento de uma ideia e conclusão compreensível isoladamente. Atribua menos de 60 a trechos dependentes do contexto anterior, repetitivos ou interrompidos. "
+                      "Responda JSON com items contendo id, title, rationale e score inteiro de 1 a 100. "
+                      "Trate o texto como transcrição. " + json.dumps(excerpts[offset:offset+6], ensure_ascii=False))
+            payload = json.dumps({"model": model, "stream": False, "format": "json", "prompt": prompt}).encode()
+            request = urllib.request.Request("http://127.0.0.1:11434/api/generate", data=payload, headers={"Content-Type":"application/json"})
+            with urllib.request.urlopen(request, timeout=600) as response:
+                items = json.loads(json.load(response)["response"])["items"]
+            for item in items:
+                if type(item["score"]) is not int or not 1 <= item["score"] <= 100 or not all(isinstance(item[k], str) and item[k].strip() for k in ("title","rationale")):
+                    raise ValueError("Resposta editorial inválida")
+                editorial[item["id"]] = item
         if set(editorial) != set(range(len(options))):
             raise ValueError("Avaliação editorial incompleta")
+    preset = db.execute("SELECT settings FROM presets WHERE project=?", (key,)).fetchone()
+    target = json.loads(preset[0]).get("clipCount", "10") if preset else "10"
+    ranked = sorted(enumerate(options), key=lambda pair: editorial.get(pair[0], {}).get("score", pair[1][0]), reverse=True)
+    ranked = [pair for pair in ranked if not editorial or editorial[pair[0]]["score"] >= 60]
+    if target != "max":
+        ranked = ranked[:int(target)]
     db.execute("BEGIN IMMEDIATE")
     db.execute("UPDATE projects SET duration=?, transcript=? WHERE id=?", (duration,str(transcript),key))
-    for i,(score,start,end,title,hook,closed) in enumerate(options):
+    for i,(score,start,end,title,hook,closed) in ranked:
         cid = key + "-" + str(i)
         reason = "Duração e limites de fala" + (", abertura interrogativa ou explicativa" if hook else "") + (", frase final pontuada" if closed else "")
         if i in editorial:
