@@ -3,18 +3,35 @@ import {useEffect,useRef,useState} from 'react';
 import Link from 'next/link';
 import styles from './office.module.css';
 import map from './map.json';
+import {Ambience} from './Ambience';
 import {loadScene} from './assets';
 
 type Point = {x:number;y:number};
 const size=32;
 const directions:Record<string,Point>={ArrowUp:{x:0,y:-1},ArrowDown:{x:0,y:1},ArrowLeft:{x:-1,y:0},ArrowRight:{x:1,y:0}};
 const aliases:Record<string,string>={w:'ArrowUp',a:'ArrowLeft',s:'ArrowDown',d:'ArrowRight'};
-// Caio takes two steps beside the coffee station and then returns to his cup.
-const idleOffsets=[0,0,0,0,0,0,0,0,.3,.65,1,1,1,.65,.3,0];
+// Each short excursion ends at the rest spot before a new destination is chosen.
+function usePatrol(){
+  const [offset,setOffset]=useState({x:0,y:0});
+  useEffect(()=>{
+    if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+    let frame=0,start=performance.now(),dx=0,dy=0;
+    function step(now:number){
+      const t=(now-start)/1000;
+      if(t>=6){start=now;[dx,dy]=[[1,0],[-1,0],[0,1]][Math.floor(Math.random()*3)]}
+      const k=Math.max(0,Math.min(1,(t-1.4)/.8,(5.4-t)/.8));
+      const x=k*dx,y=k*dy;
+      setOffset(old=>old.x===x&&old.y===y?old:{x,y});
+      frame=requestAnimationFrame(step);
+    }
+    frame=requestAnimationFrame(step);return ()=>cancelAnimationFrame(frame);
+  },[]);
+  return offset;
+}
 const same=(a:Point,b:Point)=>a.x===b.x && a.y===b.y;
 function walkable(p:Point,solid:number[]){
   const tile=map.tiles[p.y]?.[p.x];
-  return tile!==undefined && solid[p.y*map.tiles[0].length+p.x]===0 && !map.rooms.some(room=>same(room,p)||(!room.working&&p.y===room.y&&p.x===room.x+1));
+  return tile!==undefined && solid[p.y*map.tiles[0].length+p.x]===0 && !map.rooms.some(room=>same(room,p)||(!room.working&&((p.y===room.y&&Math.abs(p.x-room.x)<=1)||(p.x===room.x&&p.y===room.y+1))));
 }
 function path(from:Point,to:Point,solid:number[]){
   const queue=[from], parents=new Map<Point,Point>(), seen=new Set([from.x+','+from.y]);
@@ -47,12 +64,13 @@ export default function Office(){
     setToday(new Date());
     const clock=setInterval(()=>setToday(new Date()),60000);
     const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const animation=reduced?undefined:setInterval(()=>{if(!document.hidden)tick(n=>(n+1)%idleOffsets.length)},450);
+    const animation=reduced?undefined:setInterval(()=>{if(!document.hidden)tick(n=>(n+1)%16)},450);
     return ()=>{clearInterval(clock);clearInterval(animation)};
   },[]);
   const daysBeforeToday=today?(today.getDay()+6)%7:0;
   const rooms=map.rooms.map((r,i)=>({...r,done:r.done+(week?map.demoActivity.completedPreviousDays.slice(0,daysBeforeToday).reduce((sum,day)=>sum+day[i],0):0)}));
-  const people=rooms.map(r=>({...r,x:r.x+(r.working?0:idleOffsets[frame])}));
+  const patrol=usePatrol();
+  const people=rooms.map(r=>({...r,x:r.working?r.seat.x:r.x+patrol.x,y:r.working?r.seat.y:r.y+patrol.y}));
   const done=rooms.reduce((n,r)=>n+r.done,0);
   const pending=rooms.reduce((n,r)=>n+r.count,0);
   const total=done+pending+rooms.filter(r=>r.working).length;
@@ -62,7 +80,7 @@ export default function Office(){
   useEffect(()=>{
     const el=viewport.current!;
     const resize=new ResizeObserver(()=>{
-      const zoom=Math.min(4,Math.max(2,Math.round(Math.min(el.clientWidth/width,el.clientHeight/height))));
+      const zoom=Math.max(2,Math.ceil(Math.max(el.clientWidth/width,el.clientHeight/height)));
       setScale(zoom);
     });
     resize.observe(el);
@@ -108,21 +126,39 @@ export default function Office(){
     if(!scene)return;
     const {width:cols,height:rows,layers}=scene.map;
     const entities=people.map((r,i)=>({x:r.x,y:r.y,draw:()=>{
-      const stroll=!Number.isInteger(r.x);
-      scene.actor(ctx,i,r.x,r.y,r.working?'up':stroll?(frame<11?'right':'left'):'down',r.working?'Digitar':stroll?'Andar':'Café',frame);
+      const stroll=!Number.isInteger(r.x)||!Number.isInteger(r.y);
+      if(r.working){
+        // The north-facing backrest is between the viewer and the seated agent.
+        scene.actor(ctx,i,r.x,r.y-0.54,'up','Digitar',frame);
+        scene.tile(ctx,18,r.x,r.y);
+      }else{
+        scene.actor(ctx,i,r.x,r.y,stroll?(frame<11?'right':'left'):'down',stroll?'Andar':'Café',frame);
+      }
     }}));
     entities.push({x:avatar.x,y:avatar.y,draw:()=>scene.actor(ctx,3,avatar.x,avatar.y,facing.current,walking.current?'Andar':'Parado',walking.current?Math.floor(distance.current*8):frame)});
     layers[0].data.forEach((gid,i)=>scene.tile(ctx,gid,i%cols,Math.floor(i/cols)));
     for(let y=0;y<rows;y++){
-      for(let x=0;x<cols;x++)scene.tile(ctx,layers[1].data[y*cols+x],x,y);
+      for(let x=0;x<cols;x++){
+        const gid=layers[1].data[y*cols+x],left=x*size,top=y*size;
+        scene.tile(ctx,gid,x+([7,54].includes(gid)&&frame%8>4?1/32:0),y);
+        if(gid===1||gid===2||gid===53){
+          ctx.fillStyle=frame%6<3?'#87b8c8':'#96cddd';ctx.fillRect(left+9,top+2,6,1);
+          ctx.fillStyle='#ebe9db';ctx.fillRect(left+29,top+7-frame%4,1,2);
+        }
+        if(gid===60){
+          ctx.fillStyle=frame%4<2?'#f5eddf':'#dad4c7';
+          for(let k=0;k<3;k++)ctx.fillRect(left+15+((frame+k)%3),top-7-k*3-frame%3,2,2);
+        }
+        if(gid===19||gid===8){ctx.fillStyle=gid===19?'#8adc9f':'#c3edf4';ctx.fillRect(left+20,top+16+(gid===8?frame%3:0),frame%4===0?2:1,2)}
+      }
       entities.filter(e=>Math.floor(e.y)===y).sort((a,b)=>a.y-b.y).forEach(e=>e.draw());
     }
     ctx.font='bold 10px system-ui';ctx.textAlign='center';
     map.rooms.forEach((r,i)=>{
-      ctx.fillStyle='#ffefd4';ctx.fillRect((4+6*i)*size-28,6*size+1,80,14);
-      ctx.fillStyle='#384553';ctx.fillText(r.name,(4+6*i)*size+12,6*size+12);
+      ctx.fillStyle='#ffefd4';ctx.fillRect(r.signX*size-28,r.signY*size+1,80,14);
+      ctx.fillStyle='#384553';ctx.fillText(r.name,r.signX*size+12,r.signY*size+12);
     });
-  },[avatar,frame,scene]);
+  },[avatar,frame,scene,patrol]);
   const anchor=(x:number,y:number)=>({left:(x+.5)*size/width*100+'%',top:y*size/height*100+'%'});
   return <main className={styles.office} aria-label="Escritório virtual">
     <header className={styles.hud}><Link href="/studio" className={styles.back} aria-label="Voltar ao Studio" title="Voltar ao Studio">←</Link>
@@ -131,7 +167,7 @@ export default function Office(){
     <div className={styles.overall}><strong>{done} de {total} tarefas concluídas {week?'nesta semana':'hoje'}</strong><progress value={done} max={total}/><small>Sem histórico suficiente para estimar</small></div>
     <label><select aria-label="Período do escritório" value={week?'week':'today'} onChange={e=>setWeek(e.target.value==='week')}><option value="today">Hoje</option><option value="week">Esta semana</option></select></label>
     <nav aria-label="Progresso por agente">{rooms.map((r,i)=><button key={r.name} onClick={()=>select(i)}><i style={{background:r.color}}/>{r.person} · {r.done}/{r.done+r.count+Number(r.working)}</button>)}
-    <button onClick={()=>select(-1)}>Central de operações ↗</button></nav></header>
+    <button onClick={()=>select(-1)}>Central de operações ↗</button><Ambience/></nav></header>
     {assetError&&<p role="alert">Falha ao carregar a arte do escritório. Recarregue a página.</p>}
     <div className={styles.viewport} ref={viewport}><div className={styles.world} style={{width:width*scale,height:height*scale,minHeight:0}}>
     <canvas ref={canvas} tabIndex={0} aria-label="Mapa do escritório. Use setas ou WASD para andar, Enter para interagir ou toque no chão." width={width} height={height}
@@ -156,31 +192,28 @@ export default function Office(){
       onPointerMove={e=>{
         const rect=e.currentTarget.getBoundingClientRect();
         const p={x:Math.floor((e.clientX-rect.left)*width/rect.width/size),y:Math.floor((e.clientY-rect.top)*height/rect.height/size)};
-        const agent=map.rooms.find(r=>same(r,p));
+        const agent=people.find(r=>same({x:Math.round(r.x),y:Math.round(r.y)},p));
         e.currentTarget.title=agent?agent.name+' · '+agent.task:same(p,map.computer)?'Computador central':'';
       }}
       onClick={e=>{
         e.currentTarget.focus({preventScroll:true});held.current=null;
         const rect=e.currentTarget.getBoundingClientRect();
         const p={x:Math.floor((e.clientX-rect.left)*width/rect.width/size),y:Math.floor((e.clientY-rect.top)*height/rect.height/size)};
-        const i=map.rooms.findIndex(r=>same(p,r));
+        const i=people.findIndex(r=>same(p,{x:Math.round(r.x),y:Math.round(r.y)}));
         if(i>=0||same(p,map.computer)){select(i);return}
         const first=route.current.slice(0,1);
         route.current=[...first,...(solid?path(first[0]||position.current,p,solid):[])];
       }}/>
     {people.map((r,i)=><div key={r.name}>
-      <button className={styles.person} style={anchor(r.x,r.y-.5)} onClick={()=>select(i)}>
-        <span className={styles.tag}><i data-state={r.working?'working':'idle'}/>{r.person}</span>
-        <span className={styles.bubble}>{r.task} · {r.elapsed}<br/>A seguir · {r.next}</span>
-      </button>
-      <button className={styles.screen} style={anchor([3,10,16][i],2.85)} onClick={()=>select(i)}>
-        <b>{r.task}</b><span>{r.elapsed} · {r.next}</span>
+      <button className={styles.person} aria-label={r.person+" · "+r.name} style={anchor(r.x,r.y+(r.working?-.8:-.5))} onClick={()=>select(i)}>
+        <span className={styles.tag}><i data-state={r.working?'working':'idle'}/></span>
+        <span className={styles.bubble}>{r.person} · {r.task} · {r.elapsed}<br/>A seguir · {r.next}</span>
       </button>
     </div>)}
     <span className={styles.you} style={anchor(avatar.x,avatar.y-.5)}>Você</span>
-    <button className={styles.board} style={anchor(map.computer.x,map.computer.y)} onClick={()=>select(-1)}>
+    <button className={styles.board} style={anchor(12,1.1)} onClick={()=>select(-1)}>
       <b>Central de operações</b>
-      {rooms.map(r=><span key={r.name}>{r.name} · {r.done} prontas · {r.count} na fila</span>)}
+
     </button></div></div>
     <dialog ref={dialog} onClose={()=>select(null)} className={styles.dialog}>
       <button autoFocus onClick={()=>select(null)} aria-label="Fechar detalhes">×</button>

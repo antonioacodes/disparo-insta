@@ -37,3 +37,10 @@
 @media(max-width:700px){.hud{gap:4px 8px;padding:5px 8px;font-size:11px}.hud label{order:1;margin-left:auto}.stats{order:2}.overall{order:3}.hud nav{order:4}.stats span{padding:3px}.world{width:max(760px,138dvh)}}
 .viewport{display:flex;align-items:flex-start}
 .world{flex:none;margin:auto;aspect-ratio:auto}
+.world{margin:0}
+.viewport{scrollbar-width:none}
+.viewport::-webkit-scrollbar{display:none}
+.world canvas:focus:not(:focus-visible){outline:0}
+.person .tag{padding:4px;border-radius:50%}
+.tag i[data-state=idle]{width:10px;height:10px;background:transparent;box-shadow:inset -4px -2px #ffdc72}
+.board{width:auto;white-space:nowrap;transform:translate(-50%,-125%);font-size:clamp(10px,.9cqw,15px)}

@@ -5,3 +5,5 @@
 Usados na composição: sala de reunião, pisos, worker, mesas, computadores, cadeiras, plantas, relógio, canecas, armário, cavalete e bebedouro. O pacote oferece proporções coerentes em grade de 32 px e metadados para Tiled. Composição da sala de edição, janelas, poses sentada, digitação e café e variações de passada foram adaptadas para esta prévia. A referência Gather orientou a disposição do espaço. O PNG é uma prancha de revisão do projeto.
 
 No Escritório, os atlas de personagens, mobiliário, decoração e arquitetura incluem adaptações de cor, escala e pose, combinadas com rua, gramado e divisórias próprios. O crédito acompanha a distribuição da plataforma.
+
+Na sala Central, a mesa e as cadeiras são os sprites `conference_table_front`, `office_chair_front` e `office_chair_back` da Imersa Studios. O notebook, a pilha de papéis e a caneca também vêm do pacote. Os sofás vermelho e verde e a poltrona têm desenho próprio. As estantes combinam livros próprios com a textura de madeira da mesa da Imersa. O pacote Modern tiles_Free não foi utilizado porque sua licença limita o uso à finalidade não comercial.

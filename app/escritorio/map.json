@@ -1,23 +1,25 @@
 {
   "tiles": [
-    "ggTggggggggggggggggTg",
-    "g###################g",
-    "g#P...K#KA..P#P...K#g",
-    "g#.D.X.#..D.V#..DX.#g",
-    "g#.....#.M...#S....#g",
-    "g#...S.#.....#.....#g",
-    "g###.#####.#####.###g",
-    "g#P..............VP#g",
-    "g#.S.M...C......A..#g",
-    "g#########.#########g",
-    "ggTggggggg.ggggggTggg",
-    "rrrrrrrrrrrrrrrrrrrrr"
+    "##WW######WW#WW#####WW##",
+    "#P..B.#.#P.....B#.#...P#",
+    "#.D...#.#..C....#.#.D..#",
+    "#.s...#.#..s....#.#.s..#",
+    "#....R..#.......#......#",
+    "#######.......M...#V...#",
+    "#.P.....#.F.....#.######",
+    "#.......####.####......#",
+    "######.##............B.#",
+    "#B.....P#..............#",
+    "#..D....#..........F.A.#",
+    "#..s....#..............#",
+    "#.....R.#.......P......#",
+    "############.###########"
   ],
   "rooms": [
     {
       "name": "Edição",
-      "x": 3,
-      "y": 4,
+      "x": 2,
+      "y": 2,
       "working": true,
       "task": "Legendando um corte",
       "color": "#9a65cf",
@@ -25,12 +27,18 @@
       "elapsed": "02:14",
       "next": "Renderizar prévia",
       "done": 4,
-      "count": 1
+      "count": 1,
+      "signX": 3,
+      "signY": 5,
+      "seat": {
+        "x": 2,
+        "y": 3
+      }
     },
     {
       "name": "Tendências",
-      "x": 11,
-      "y": 5,
+      "x": 21,
+      "y": 4,
       "working": false,
       "task": "Disponível",
       "color": "#409889",
@@ -38,12 +46,18 @@
       "elapsed": "—",
       "next": "Sem tarefas",
       "done": 2,
-      "count": 0
+      "count": 0,
+      "signX": 20,
+      "signY": 6,
+      "seat": {
+        "x": 20,
+        "y": 3
+      }
     },
     {
       "name": "Publicações",
-      "x": 16,
-      "y": 4,
+      "x": 4,
+      "y": 10,
       "working": true,
       "task": "Preparando uma publicação",
       "color": "#bf745c",
@@ -51,16 +65,22 @@
       "elapsed": "00:38",
       "next": "Conferir envio",
       "done": 3,
-      "count": 1
+      "count": 1,
+      "signX": 4,
+      "signY": 8,
+      "seat": {
+        "x": 4,
+        "y": 11
+      }
     }
   ],
   "spawn": {
-    "x": 10,
-    "y": 10
+    "x": 12,
+    "y": 5
   },
   "computer": {
-    "x": 9,
-    "y": 8
+    "x": 12,
+    "y": 3
   },
   "demoActivity": {
     "completedPreviousDays": [

@@ -16,7 +16,12 @@ export async function loadScene(){
   function tile(ctx:CanvasRenderingContext2D,gid:number,x:number,y:number){
     if(!gid)return;
     const set=map.tilesets.slice().reverse().find(s=>s.firstgid<=gid)!;
-    ctx.drawImage(images[set.name],(gid-set.firstgid)*48,0,48,64,x*32-8,y*32-32,48,64);
+    // Keep workstation feet on their tile while giving the desktop more depth.
+    const workstation=[1,2,53].includes(gid);
+    const seatOrCabinet=[21,69,70].includes(gid);
+    const width=workstation?60:seatOrCabinet?54:48;
+    const height=workstation?78:seatOrCabinet?72:64;
+    ctx.drawImage(images[set.name],(gid-set.firstgid)*48,0,48,64,Math.round(x*32+16-width/2),Math.round(y*32+32-height),width,height);
   }
   function actor(ctx:CanvasRenderingContext2D,id:number,x:number,y:number,dir:string,state:keyof typeof sprites.characters.states,frame:number){
     const [start,length]=sprites.characters.states[state];
