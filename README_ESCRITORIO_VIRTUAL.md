@@ -358,3 +358,5 @@ Canvas 2D desenha um mapa em JSON com colisão e um atlas de personagens em pixe
 - Etapa 5: “Publicações pelo Studio” conta publicações confirmadas nas últimas 72 horas por conta e rede; novas tentativas não duplicam contagem. Exibir “Nenhuma publicação registrada” sem dados. Utilizar a proteção existente, sem login do avatar. Antes de liberar publicação ou reprocessamento, verificar a proteção efetiva das rotas na VPS, informar o responsável e obter confirmação.
 
 Cada etapa exige commit próprio e aprovação antes da seguinte.
+
+A HUD da demonstração compartilha as contagens com a Central. Hoje e Esta semana incluem fila, execução e conclusões. Publicações usa sempre a janela de 72 horas. Os exemplos ficam em map.json. A estimativa aguarda histórico real na integração de backend. O cenário usa mobiliário em pixel art próprio e respeita a preferência de movimento reduzido.
