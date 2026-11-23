@@ -347,7 +347,7 @@ Como a VPS não tem GPU, a recomendação é usar modelos pequenos e quantizados
 
 ## Decisões aprovadas e entrega da Etapa 1
 
-Acesse `/escritorio` pelo menu. Para rodar localmente, na raiz do projeto execute `npm install` e `npm run dev`. Abra `http://localhost:3000/escritorio`. A demonstração roda no navegador sem chaves, GPU ou worker. Setas/WASD movem o avatar com o mapa em foco. Clique ou toque no chão para caminhar, em um agente para filtrar a sala e no computador central para ver todos. Os botões abaixo do mapa também abrem essas visões.
+Acesse `/escritorio` pelo menu. Para rodar localmente, na raiz do projeto execute `npm install` e `npm run dev`. Abra `http://localhost:3000/escritorio`. A demonstração roda no navegador sem chaves, GPU ou worker. Setas/WASD movem o avatar com o mapa em foco. Clique ou toque no chão para caminhar, em um agente para filtrar a sala e no computador central para ver todos. Os monitores e os nomes dos agentes são controles acessíveis por teclado. O computador central abre uma janela sobreposta com o resumo das três salas. No telefone, deslize para explorar o cenário. Use a seta no canto para voltar ao Studio.
 
 Canvas 2D desenha um mapa em JSON com colisão e um atlas de personagens em pixels. O cenário redesenha quando a posição, o foco ou a seleção mudam. Três salas têm um agente cada. O quarto personagem representa o usuário. Todos os estados e tarefas da Etapa 1 são ilustrativos.
 

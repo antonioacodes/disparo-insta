@@ -2,22 +2,64 @@
   "tiles": [
     "ggTggggggggggggggggTg",
     "g###################g",
-    "g#.....#.....#.....#g",
+    "g#P...K#K...P#P...K#g",
     "g#.D...#..D..#..D..#g",
     "g#.....#.....#.....#g",
     "g#.....#.....#.....#g",
     "g###.#####.#####.###g",
-    "g#.................#g",
+    "g#P...............P#g",
     "g#.......C.........#g",
     "g#########.#########g",
     "ggTggggggg.ggggggTggg",
-    "gggggggggg.gggggggggg"
+    "rrrrrrrrrrrrrrrrrrrrr"
   ],
   "rooms": [
-    {"name":"Edição","x":3,"y":4,"working":true,"task":"Legendando um corte","color":"#9a65cf"},
-    {"name":"Tendências","x":11,"y":5,"working":false,"task":"Disponível","color":"#409889"},
-    {"name":"Publicações","x":16,"y":4,"working":true,"task":"Preparando uma publicação","color":"#bf745c"}
+    {
+      "name": "Edição",
+      "x": 3,
+      "y": 4,
+      "working": true,
+      "task": "Legendando um corte",
+      "color": "#9a65cf",
+      "person": "Lia",
+      "elapsed": "02:14",
+      "next": "Renderizar prévia",
+      "done": 4,
+      "count": 1
+    },
+    {
+      "name": "Tendências",
+      "x": 11,
+      "y": 5,
+      "working": false,
+      "task": "Disponível",
+      "color": "#409889",
+      "person": "Caio",
+      "elapsed": "—",
+      "next": "Sem tarefas",
+      "done": 2,
+      "count": 0
+    },
+    {
+      "name": "Publicações",
+      "x": 16,
+      "y": 4,
+      "working": true,
+      "task": "Preparando uma publicação",
+      "color": "#bf745c",
+      "person": "Nina",
+      "elapsed": "00:38",
+      "next": "Conferir envio",
+      "done": 3,
+      "count": 1
+    }
   ],
-  "spawn":{"x":10,"y":10},
-  "computer":{"x":9,"y":8}
+  "spawn": {
+    "x": 10,
+    "y": 10
+  },
+  "computer": {
+    "x": 9,
+    "y": 8
+  }
 }

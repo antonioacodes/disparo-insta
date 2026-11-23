@@ -1,5 +1,33 @@
 {
-  "standing":["  hhhh  "," hhhhhh ","  ssss  ","  ssss  ","  cccc  "," sccccs ","  p  p  ","  b  b  "],
-  "seated":["  hhhh  "," hhhhhh ","  ssss  ","  ssss  ","  cccc  "," ssccss "," pppppp "," bb  bb "],
-  "palette":{"h":"#382f41","s":"#eab789","p":"#45556b","b":"#302f40"}
+  "standing": [
+    "  hhhh  ",
+    " hhhhhh ",
+    " hsessh ",
+    "  ssms  ",
+    "  cvcc  ",
+    " sccccs ",
+    "  p  p  ",
+    " bb  bb "
+  ],
+  "seated": [
+    "  hhhh  ",
+    " hHHhhh ",
+    " hhhhhH ",
+    "  hssh  ",
+    " scvccs ",
+    " ssccss ",
+    " qpccpq ",
+    " qqqqqq "
+  ],
+  "palette": {
+    "h": "#382f41",
+    "s": "#eab789",
+    "p": "#45556b",
+    "b": "#302f40",
+    "e": "#342c30",
+    "m": "#ac7562",
+    "v": "#e5d7bc",
+    "H": "#685361",
+    "q": "#546277"
+  }
 }
