@@ -1,5 +1,5 @@
 'use client';
-import {Info} from 'lucide-react';
+import {Info, Scissors} from 'lucide-react';
 import {useState} from 'react';
 export const defaults={motion:'off',clipCount:'10',format:'vertical',captions:'generate',facecam:'off',font:'DejaVu Sans',animation:'off'};
 export function EditingStyle({value,onChange}:{value:typeof defaults;onChange:(v:typeof defaults)=>void}){
@@ -40,7 +40,7 @@ export function EditingStyle({value,onChange}:{value:typeof defaults;onChange:(v
       <button type="button" aria-pressed={value.clipCount!=='max'} onClick={()=>onChange({...value,clipCount:value.clipCount==='max'?'10':value.clipCount})}>Escolher quantidade</button>
       <button type="button" aria-pressed={value.clipCount==='max'} onClick={()=>onChange({...value,clipCount:'max'})}>Máximo possível</button>
     </div>
-    {value.clipCount!=='max' && <label>Meta de cortes <input type="number" min="1" step="1" value={value.clipCount} onChange={e=>onChange({...value,clipCount:e.target.value})} onBlur={()=>{if(!/^[1-9][0-9]*$/.test(value.clipCount))onChange({...value,clipCount:'10'})}}/></label>}
+    {value.clipCount!=='max' && <label className="studioField clipTarget"><span>Meta de cortes</span><span className="studioTextInput"><Scissors size={19} aria-hidden="true"/><input inputMode="numeric" type="number" min="1" step="1" value={value.clipCount} onChange={e=>onChange({...value,clipCount:e.target.value})} onBlur={()=>{if(!/^[1-9][0-9]*$/.test(value.clipCount))onChange({...value,clipCount:'10'})}}/></span></label>}
     <div className="styleNote"><Info size={17}/><span>{value.clipCount==='max'?'Seleciona todos os trechos aproveitáveis que podem virar cortes sem se sobrepor.':'O Studio tenta alcançar essa quantidade. Se houver poucos trechos completos, você receberá menos cortes.'}</span></div>
   </fieldset>
   <fieldset><legend>Fonte das legendas</legend><div className="captionSample" style={{fontFamily:'"'+value.font+'",sans-serif'}}><small>{value.font}</small>Esse momento merece um corte.</div>

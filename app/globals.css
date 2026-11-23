@@ -56,3 +56,27 @@
 .processHistory{list-style:none;padding:0;margin:12px 0 0;max-height:24rem;overflow:auto}
 .processHistory li{display:flex;gap:12px;padding:8px 0;border-top:1px solid #e5e0ef}
 .processHistory time{font-size:.8rem;color:#645d72;font-variant-numeric:tabular-nums}
+
+.main,.grid>*,.editStyle fieldset{min-width:0}
+.mobileMenu{display:none}
+.clipTarget{margin:12px 0}
+.studioModes{grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))}
+.main video,.main img,.main input,.main select,.main textarea{max-width:100%}
+@media(max-width:700px){
+  .shell{display:block}
+  .sidebar{display:grid;grid-template-columns:1fr auto;align-items:center;width:100%;padding:10px 16px;border:0;border-bottom:1px solid var(--line)}
+  .sidebar .brand{font-size:22px;margin:0}
+  .mobileMenu{display:block;min-height:44px;padding:0 16px;border-radius:10px;background:#f0ebff;color:#493389;font-weight:650}
+  .sidebar nav{display:none;grid-column:1/-1}
+  .sidebar nav[data-open=true]{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;padding-top:10px}
+  .sidebar .nav-item span{display:inline}
+  .sidebar .nav-item{min-height:44px;gap:6px;margin:0;text-decoration:none}
+  .main{padding:20px 14px;overflow-wrap:anywhere}
+  .grid{grid-template-columns:minmax(0,1fr)}
+  .card,.editStyle,.clipVersion{padding:16px}
+  .section-head,.main div[style*="display:flex"],.main div[style*="display: flex"]{flex-wrap:wrap}
+  .main pre,.main table{display:block;max-width:100%;overflow:auto}
+  .main fieldset{min-inline-size:0}
+  .main input,.main select,.main textarea{font-size:16px}
+  .main button,.main .btn{min-height:44px}
+}
