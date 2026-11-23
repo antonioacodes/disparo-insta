@@ -13,7 +13,7 @@ def editing_pending(db):
     return db.execute("SELECT 1 FROM jobs WHERE state IN ('running','queued') LIMIT 1").fetchone() is not None
 
 
-def run_background(db, work, args):
+def run_background(db, work, args, cancelled=None):
     if editing_pending(db):
         raise EditingPending()
     with (work/'cpu.lock').open('a') as lock:
@@ -29,6 +29,8 @@ def run_background(db, work, args):
                 try:
                     code = child.wait(timeout=.5)
                 except subprocess.TimeoutExpired:
+                    if cancelled and cancelled():
+                        return
                     if editing_pending(db):
                         raise EditingPending()
                     continue

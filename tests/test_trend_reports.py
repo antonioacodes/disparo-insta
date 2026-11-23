@@ -55,3 +55,14 @@ class Reports(unittest.TestCase):
         self.assertEqual((first['rate'],first['gain']),(2000,4000))
         self.assertEqual(duration('PT1H10M2S'),4202)
         self.assertEqual(period(-1,now)['publishedBefore'],period(0,now)['publishedAfter'])
+
+    def test_cancel_is_terminal_and_required_before_deletion(self):
+        ident=trends.submit(self.db,'Tema','BR',3,'YouTube')
+        self.assertIn('error',trends.manage(self.db,ident,'delete'))
+        self.assertTrue(trends.manage(self.db,ident,'cancel')['ok'])
+        with patch.object(trends,'collect') as collect:
+            trends.process(self.db,ident)
+            collect.assert_not_called()
+        self.assertEqual(trends.recent(self.db)[0]['state'],'Interrompida')
+        self.assertTrue(trends.manage(self.db,ident,'delete')['ok'])
+        self.assertEqual(trends.recent(self.db),[])

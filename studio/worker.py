@@ -506,11 +506,13 @@ def worker():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=["trend-step","trend-submit","trend-list","work","office","score-audience","create","list","approve","reject","revise","captions","audience","delete-project","import","history"])
+    parser.add_argument("action", choices=["trend-manage","trend-step","trend-submit","trend-list","work","office","score-audience","create","list","approve","reject","revise","captions","audience","delete-project","import","history"])
     parser.add_argument("args", nargs="*")
     opts = parser.parse_args()
     trends.init(db)
-    if opts.action == "trend-step":
+    if opts.action == "trend-manage":
+        print(json.dumps(trends.manage(db,int(opts.args[0]),opts.args[1])))
+    elif opts.action == "trend-step":
         trends.process(db,int(opts.args[0]))
     elif opts.action == "trend-submit":
         try:
@@ -527,7 +529,7 @@ if __name__ == "__main__":
         db.execute("BEGIN")
         result = snapshot(db, WORK, online)
         result["audienceStatus"] = audience_status() if online else "offline"
-        active=db.execute("SELECT * FROM trend_reports WHERE state NOT IN ('Concluída','Erro') ORDER BY id LIMIT 1").fetchone()
+        active=db.execute("SELECT * FROM trend_reports WHERE state NOT IN ('Concluída','Erro','Interrompida') ORDER BY id LIMIT 1").fetchone()
         cfg=trends.settings()
         result['trendStatus']=('Processador offline' if not online else ('Esperando' if active['state'] in ('Esperando','Na fila') else 'Trabalhando') if active else 'Ocioso' if cfg['STUDIO_TRENDS_MODEL'] and any(trends.sources(cfg).values()) else 'Ainda não configurado')
         result['trendTask']=dict(query=active["query"],state=active["state"],progress=trends.progress(db,active)) if active and online else None

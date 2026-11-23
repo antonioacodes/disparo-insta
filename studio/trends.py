@@ -80,7 +80,7 @@ def progress(db, row):
         stage, label = 3, 'Relatório concluído'
     elif state == 'Esperando':
         stage, label = int(bool(items)), 'Pausado · aguardando o processamento do Studio'
-    elif state == 'Erro':
+    elif state in ('Erro','Interrompida'):
         stage, label = int(bool(items)), 'Pesquisa interrompida'
     else:
         stage, label = 0, 'Na fila para pesquisar'
@@ -169,7 +169,7 @@ def step(db, ident):
         items=collect(row,cfg)
         if row['platform']=='YouTube':
             rank(db,items,time.time())
-        db.execute('UPDATE trend_reports SET items=?,state=? WHERE id=?',
+        db.execute("UPDATE trend_reports SET items=?,state=? WHERE id=? AND state!='Interrompida'",
                    (json.dumps(items,ensure_ascii=False),'Analisando' if items else 'Concluída',ident))
         return
     prompt=('Você auxilia um editor brasileiro. Com base exclusivamente nos registros abaixo, explique em português '
@@ -211,7 +211,7 @@ def step(db, ident):
     if not answer:
         raise ValueError('Resposta vazia do modelo')
     db.execute("UPDATE trend_timing SET finished=? WHERE report=?",(time.time(),ident))
-    db.execute("UPDATE trend_reports SET analysis=?,state='Concluída' WHERE id=?",(answer,ident))
+    db.execute("UPDATE trend_reports SET analysis=?,state='Concluída' WHERE id=? AND state!='Interrompida'",(answer,ident))
 
 
 def loop(work):
@@ -225,23 +225,35 @@ def loop(work):
                 db.execute('DELETE FROM trend_reports WHERE created<?',(time.time()-30*86400,))
                 db.execute('DELETE FROM trend_samples WHERE at<?',(time.time()-30*86400,))
                 cleanup=time.time()+3600
-            row=db.execute("SELECT * FROM trend_reports WHERE state NOT IN ('Erro','Concluída') ORDER BY id LIMIT 1").fetchone()
+            row=db.execute("SELECT * FROM trend_reports WHERE state NOT IN ('Erro','Concluída','Interrompida') ORDER BY id LIMIT 1").fetchone()
             if row:
                 try:
-                    run_background(db,work,[sys.executable,'-m','studio.worker','trend-step',str(row['id'])])
+                    def cancelled():
+                        return not db.execute("SELECT 1 FROM trend_reports WHERE id=? AND state!='Interrompida'",(row['id'],)).fetchone()
+                    run_background(db,work,[sys.executable,'-m','studio.worker','trend-step',str(row['id'])],cancelled)
                     continue
                 except EditingPending:
-                    db.execute("UPDATE trend_reports SET state='Esperando' WHERE id=? AND state NOT IN ('Erro','Concluída')",(row['id'],))
+                    db.execute("UPDATE trend_reports SET state='Esperando' WHERE id=? AND state NOT IN ('Erro','Concluída','Interrompida')",(row['id'],))
         except Exception as exc:
             print('Fila de tendências:',type(exc).__name__,flush=True)
         time.sleep(3)
 
 
 def process(db, ident):
-    db.execute("UPDATE trend_reports SET state=CASE WHEN items IS NULL THEN 'Pesquisando' ELSE 'Analisando' END WHERE id=?",(ident,))
+    if not db.execute("UPDATE trend_reports SET state=CASE WHEN items IS NULL THEN 'Pesquisando' ELSE 'Analisando' END WHERE id=? AND state IN ('Na fila','Pesquisando','Analisando','Esperando')",(ident,)).rowcount:
+        return
     try:
         step(db,ident)
     except Exception as exc:
         error = ('A API retornou HTTP '+str(exc.code) if isinstance(exc,urllib.error.HTTPError)
                  else 'Falha na conexão ou na resposta do serviço')
-        db.execute("UPDATE trend_reports SET state='Erro', error=? WHERE id=?",(error,ident))
+        db.execute("UPDATE trend_reports SET state='Erro', error=? WHERE id=? AND state!='Interrompida'",(error,ident))
+
+def manage(db, ident, action):
+    if action == 'cancel':
+        changed=db.execute("UPDATE trend_reports SET state='Interrompida' WHERE id=? AND state IN ('Na fila','Esperando','Pesquisando','Analisando')",(ident,)).rowcount
+    elif action == 'delete':
+        changed=db.execute("DELETE FROM trend_reports WHERE id=? AND state IN ('Erro','Concluída','Interrompida')",(ident,)).rowcount
+    else:
+        raise ValueError('Ação inválida')
+    return {'ok': True} if changed else {'error':'O relatório mudou. Atualize e tente novamente.'}

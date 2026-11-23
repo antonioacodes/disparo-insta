@@ -17,7 +17,12 @@ export async function POST(request:Request){
   if(origin && new URL(origin).host!==request.headers.get('host'))
     return NextResponse.json({error:'Origem inválida.'},{status:403});
   try{
-    const {query,country,days,platform}=await request.json();
+    const {query,country,days,platform,action,id}=await request.json();
+    if(action==='cancel'||action==='delete'){
+      if(!Number.isSafeInteger(id)||id<1)return NextResponse.json({error:'Relatório inválido.'},{status:400});
+      const result=await call(['trend-manage',String(id),action]);
+      return NextResponse.json(result,{status:result.ok?200:409});
+    }
     if(typeof query!=='string'||query.trim().length<2||query.length>120||!['YouTube','Twitch'].includes(platform)||
        typeof country!=='string'||!/^[A-Z]{2}$/.test(country)||![-1,0,1,3,7,30].includes(days))
       return NextResponse.json({error:'Confira o tema e os filtros.'},{status:400});
