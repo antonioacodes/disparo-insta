@@ -5,7 +5,7 @@ import {ActionCard} from './Department';
 import styles from './office.module.css';
 
 type Platform='YouTube'|'Twitch';
-type Item={title:string;creator:string;url:string|null;views?:string;category?:string};
+type Item={title:string;creator:string;url:string|null;views?:string;category?:string;score?:number;seconds?:number|null;likes?:string|null;comments?:string|null;rate?:number;ageHours?:number;gain?:number;intervalHours?:number;published?:string};
 type Report={progress?:ResearchProgress;id:number;query:string;state:string;created:number;platform:Platform;country:string;days:number;analysis:string|null;error:string|null;items:Item[]};
 type Data={reports:Report[];sources:Record<Platform,boolean>;model:boolean};
 export function Trends(){
@@ -55,7 +55,7 @@ export function Trends(){
       <div>{['GTA e jogos de mundo aberto','Receitas rápidas','Inteligência artificial'].map(s=><button type="button" key={s} onClick={()=>setQuery(s)}>{s}</button>)}</div>
       <label>Plataforma<select value={platform} onChange={e=>source(e.target.value as Platform)}><option>YouTube</option><option>Twitch</option></select></label>
       {platform==='YouTube'?<><label>País de disponibilidade<select value={country} onChange={e=>region(e.target.value)}><option value="BR">Brasil</option><option value="PT">Portugal</option><option value="US">Estados Unidos</option></select></label>
-        <label>Publicados nos últimos<select value={days} onChange={e=>period(Number(e.target.value))}>{[1,3,7,30].map(d=><option key={d} value={d}>{d} {d===1?'dia':'dias'}</option>)}</select></label></>:<p>Busca canais ao vivo agora, em todas as regiões.</p>}
+        <label>Data de publicação<select value={days} onChange={e=>period(Number(e.target.value))}><option value={0}>Hoje (Brasília)</option><option value={-1}>Ontem (Brasília)</option>{[1,3,7,30].map(d=><option key={d} value={d}>{d===1?'Últimas 24 horas':'Últimos '+d+' dias'}</option>)}</select></label></>:<p>Busca canais ao vivo agora, em todas as regiões.</p>}
       {data&&!data.sources[platform]&&<p>O acesso à API de {platform} precisa ser configurado na VPS.</p>}
       {data&&!data.model&&<p>Aguardando configuração do modelo de análise.</p>}
       {error&&<p role="alert">{error}</p>}
@@ -66,10 +66,14 @@ export function Trends(){
         <h3>{report.query}</h3><p>{report.platform} · {new Date(report.created*1000).toLocaleDateString('pt-BR')} · {report.state==='Esperando'?'Aguardando liberação do processamento do Studio':report.state}</p>
         <TrendProgress progress={report.progress}/>
         {report.error&&<p role="alert">{report.error}</p>}
-        {report.analysis&&<p>{report.analysis}</p>}
+        {report.analysis&&<details open={report.platform!=='YouTube'}><summary>Parecer da IA</summary><p>{report.analysis}</p></details>}
+        {report.items.some(v=>v.score!==undefined)&&<><h4>Melhores opções para cortes</h4><small>O índice de indicação combina ritmo de visualizações, duração, idade e engajamento disponível.</small></>}
         {report.state==='Concluída'&&!report.items.length&&<p>Nenhum resultado para estes filtros.</p>}
-        <ul>{report.items.map((v,i)=><li key={i}>{v.url?<a href={v.url} target="_blank" rel="noreferrer">{v.title}</a>:<strong>{v.title}</strong>}
-          <small>{v.creator} · {report.platform}{v.views?' · '+Number(v.views).toLocaleString('pt-BR')+' visualizações':''}</small></li>)}</ul>
+        <ul>{report.items.map((v,i)=><li key={i}>{v.score!==undefined&&<strong>#{i+1} · {v.score}% de indicação para cortes</strong>}{v.url?<a href={v.url} target="_blank" rel="noreferrer">{v.title}</a>:<strong>{v.title}</strong>}
+          <small>{v.creator} · {report.platform}{v.views?' · '+Number(v.views).toLocaleString('pt-BR')+' visualizações':''}</small>
+          {v.score!==undefined&&<><span>{Number(v.rate).toLocaleString('pt-BR')} views/h {v.gain!==undefined?'entre medições ('+v.gain.toLocaleString('pt-BR')+' novas em '+v.intervalHours+' h)':'em média desde a publicação'} · publicado há {v.ageHours} h</span>
+          {v.seconds!=null&&<span>{v.seconds>=900?'Vídeo longo, com espaço para selecionar vários trechos.':v.seconds<180?'Vídeo curto, com pouca margem para extrair novos cortes.':'Duração intermediária para selecionar trechos.'}</span>}
+          <small>{v.seconds!=null?'Duração '+Math.floor(v.seconds/60)+' min '+v.seconds%60+' s':'Duração indisponível'} · {v.likes!=null?Number(v.likes).toLocaleString('pt-BR')+' curtidas':'Curtidas indisponíveis'} · {v.comments!=null?Number(v.comments).toLocaleString('pt-BR')+' comentários':'Comentários indisponíveis'}</small></>}</li>)}</ul>
       </article>}</>}</>}
   </section>
 }

@@ -19,7 +19,7 @@ export async function POST(request:Request){
   try{
     const {query,country,days,platform}=await request.json();
     if(typeof query!=='string'||query.trim().length<2||query.length>120||!['YouTube','Twitch'].includes(platform)||
-       typeof country!=='string'||!/^[A-Z]{2}$/.test(country)||![1,3,7,30].includes(days))
+       typeof country!=='string'||!/^[A-Z]{2}$/.test(country)||![-1,0,1,3,7,30].includes(days))
       return NextResponse.json({error:'Confira o tema e os filtros.'},{status:400});
     const result=await call(['trend-submit',query,country,String(days),platform]);
     return NextResponse.json(result,{status:result.error?409:202});

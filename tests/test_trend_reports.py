@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+from studio.trend_ranking import rank, duration, period
 from io import BytesIO
 import sqlite3
 import unittest
@@ -19,7 +21,7 @@ class Reports(unittest.TestCase):
 
     def test_checkpoint_and_cached_request(self):
         ident = trends.submit(self.db, 'Jogos', 'BR', 7, 'YouTube')
-        items = [dict(title='Jogo', creator='Canal', url=None)]
+        items = [dict(title='Jogo', creator='Canal', videoId='sample', url=None)]
         with patch.object(trends, 'collect', return_value=items) as collect:
             trends.process(self.db, ident)
             partial, = trends.recent(self.db)
@@ -39,3 +41,17 @@ class Reports(unittest.TestCase):
         report, = trends.recent(self.db)
         self.assertEqual(report['state'],'Concluída')
         self.assertIsNone(report['analysis'])
+
+    def test_recent_velocity_and_clip_length(self):
+        now=datetime(2026,11,23,15,tzinfo=timezone.utc)
+        first=dict(videoId='long',views=500000,likes=30000,comments=1800,seconds=1800,published='2026-11-22T15:00:00Z')
+        old=dict(videoId='short',views=600000,seconds=40,published='2026-11-01T15:00:00Z')
+        items=[old,first]
+        rank(self.db,items,now.timestamp())
+        self.assertEqual(items[0]['videoId'],'long')
+        self.assertNotIn('gain',first)
+        first['views']+=4000
+        rank(self.db,[first],now.timestamp()+7200)
+        self.assertEqual((first['rate'],first['gain']),(2000,4000))
+        self.assertEqual(duration('PT1H10M2S'),4202)
+        self.assertEqual(period(-1,now)['publishedBefore'],period(0,now)['publishedAfter'])
