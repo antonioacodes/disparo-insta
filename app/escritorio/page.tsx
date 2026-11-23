@@ -57,6 +57,7 @@ export default function Office(){
     const animation=reduced?undefined:setInterval(()=>{if(!document.hidden)tick(n=>(n+1)%16)},450);
     return ()=>{clearInterval(clock);clearInterval(animation)};
   },[]);
+  const [logOpen,setLogOpen]=useState(false);
   const {data,failed}=useOffice();
   const start=new Date(today??0);
   start.setHours(0,0,0,0);
@@ -212,7 +213,7 @@ export default function Office(){
     <nav aria-label="Progresso por agente">{rooms.map((r,i)=><button key={r.name} onClick={()=>select(i)}><i style={{background:r.color}}/>{r.name}</button>)}
     <button onClick={()=>select(-1)}>Central de operações ↗</button><Ambience/></nav></header>
     {assetError&&<p role="alert">Falha ao carregar a arte do escritório. Recarregue a página.</p>}
-    <div className={styles.viewport}><div className={styles.world} style={{width:`min(100cqw, ${100*width/height}cqh)`,aspectRatio:`${width}/${height}`}}>
+    <div className={styles.workspace}><div className={styles.viewport}><div className={styles.world} style={{width:`min(100cqw, ${100*width/height}cqh)`,aspectRatio:`${width}/${height}`}}>
     <canvas ref={canvas} tabIndex={0} aria-label="Mapa do escritório. Use setas ou WASD para andar, Enter para interagir ou toque no chão." width={width} height={height}
       onKeyDown={e=>{
         if(e.key==='Enter'){
@@ -264,6 +265,25 @@ export default function Office(){
       <b>Central de operações</b>{ready.length>0&&<span className={styles.ready}>{ready.length} {ready.length===1?'vídeo pronto':'vídeos prontos'}</span>}
 
     </button></div></div>
+    <aside className={styles.activity} aria-label="Atividade dos agentes">
+      <h2>Atividade dos agentes</h2>
+      <button className={styles.logToggle} aria-expanded={logOpen} aria-controls="agent-log" onClick={()=>setLogOpen(!logOpen)}>Atividade dos agentes <span>{logOpen?'▾':'▴'}</span></button>
+      <div id="agent-log" className={styles.logBody} data-open={logOpen}>
+        {failed&&<p role="status">Sem conexão · exibindo a última atualização disponível.</p>}
+        <h3>Agora</h3>
+        {rooms.map((r,i)=><div className={styles.agentRow} key={r.person}>
+          <strong><i style={{background:r.color}}/>{r.person}</strong><small>{r.status}</small>
+          {i===0&&current&&<p>{current.stage||current.label}{current.project&&' · '+current.project}{prediction&&' · '+eta}</p>}
+          {i===1&&data?.trendTask&&<p>{data.trendTask.query} · {data.trendTask.progress?.label||data.trendTask.state}</p>}
+        </div>)}
+        <h3>Últimas conclusões</h3>
+        {data?.activity?.filter(item=>item.at>=start.getTime()/1000).map(item=><article key={item.agent+item.id}>
+          <small>{item.agent} · <time>{new Date(item.at*1000).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</time></small>
+          <strong>{item.label}</strong>{item.title&&<p>{item.title}</p>}
+        </article>)}
+        {!data?.activity?.some(item=>item.at>=start.getTime()/1000)&&<p>{data?'Nenhuma conclusão registrada neste período.':'Consultando o histórico…'}</p>}
+      </div>
+    </aside></div>
     <dialog ref={dialog} onClose={()=>{select(null);setView('home');setNewProject('')}} className={[styles.dialog,room===0?styles.editDepartment:''].join(' ')}>
       <button autoFocus onClick={()=>select(null)} aria-label="Fechar detalhes">×</button>
       {room===-1&&<><h2>Central de operações</h2>{rooms.map((r,i)=><section key={r.name} className={styles.detail}><h3>{r.person} · {r.name}</h3>{details(i)}</section>)}</>}

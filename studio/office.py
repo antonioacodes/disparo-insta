@@ -65,6 +65,14 @@ def snapshot(db, work, online):
             ready.append({**item,"kind":kind,"audience":json.loads(raw) if raw else None})
     finished = [r[0] for r in db.execute("""SELECT MAX(e.at) FROM processing_events e JOIN jobs j ON j.id=e.job
         WHERE j.state='done' AND e.message='Concluído' AND e.at>=? GROUP BY j.id""",(now-7*86400,))]
-    return {"status":agent_state(online,active,queue,failed),"current":describe(active) if active else None,
+    recent = db.execute("""SELECT 'Lia' agent, j.id id, j.kind kind, f.finished at,
+        COALESCE(c.title,p.title,'') title FROM job_finish f JOIN jobs j ON j.id=f.job
+        LEFT JOIN clips c ON c.id=j.entity LEFT JOIN projects p ON p.id=COALESCE(c.project,j.entity)
+        WHERE j.state='done' AND f.finished>=?
+        UNION ALL SELECT 'Caio',r.id,'research',t.finished,r.query FROM trend_reports r
+        JOIN trend_timing t ON t.report=r.id WHERE r.state='Concluída' AND t.finished>=?
+        ORDER BY at DESC LIMIT 50""",(now-7*86400,now-7*86400))
+    activity = [{**dict(row),"label":LABELS.get(row["kind"],"Pesquisa de tendências")} for row in recent]
+    return {"activity":activity,"status":agent_state(online,active,queue,failed),"current":describe(active) if active else None,
             "prediction":prediction if online else None,"queued":len(queue),"next":describe(queue[0]) if queue else None,
             "failed":len(failed),"lastError":describe(failed[-1]) if failed else None,"finished":finished,"ready":ready}

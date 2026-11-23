@@ -110,3 +110,13 @@
 .editDepartment :global(.styleNote) svg{flex:none}
 .editDepartment a{display:inline-block;text-decoration:none}
 .editDepartment section>details summary{font-weight:650;color:#28574c}
+
+.workspace{display:grid;grid-template-columns:minmax(0,1fr) clamp(230px,19vw,330px);min-height:0}
+.activity{min-height:0;overflow:auto;background:#faf6ec;border-left:1px solid #b7afa0;padding:20px;color:#253442;font:14px/1.45 system-ui;overflow-wrap:anywhere}
+.activity h2,.logToggle{font:700 18px/1.3 system-ui;margin:0}
+.activity h3{margin:20px 0 7px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:#58695e}
+.agentRow,.activity article{padding:10px 0;border-bottom:1px solid #ddd6c8}
+.agentRow small{display:block}.agentRow i{display:inline-block;width:8px;height:8px;margin-right:7px;border-radius:50%}
+.activity p{margin:4px 0}.activity article strong{display:block}.activity small{color:#51605b}
+.logToggle{display:none}
+@media(max-width:900px){.workspace{grid-template: minmax(0,1fr) auto / minmax(0,1fr)}.activity{padding:0;border-left:0;border-top:1px solid #b7afa0;max-height:42dvh}.activity h2{display:none}.logToggle{display:flex;justify-content:space-between;align-items:center;width:100%;padding:12px 16px;background:#faf6ec;color:inherit;border:0;text-align:left}.logBody{padding:0 16px 12px}.logBody[data-open=false]{display:none}}

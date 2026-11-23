@@ -2,7 +2,7 @@ import {useEffect,useState} from 'react';
 
 type Task = {label:string;stage:string|null;project:string|null;clip:string|null;started:number|null;queuedAt:number|null;error:string|null};
 type Ready = {state:string;audience?:import('../studio/Audience').Verdict|null;id:string;title:string;projectTitle:string;project:string;kind:'preview'|'final'};
-export type Office = {trendStatus?:string;trendTask?:{progress?:import('./TrendProgress').ResearchProgress;query:string;state:string}|null;audienceStatus?:string;status:string;current:Task|null;next:Task|null;lastError:Task|null;failed:number;queued:number;
+export type Office = {activity?:{agent:string;id:number;label:string;title:string;at:number}[];trendStatus?:string;trendTask?:{progress?:import('./TrendProgress').ResearchProgress;query:string;state:string}|null;audienceStatus?:string;status:string;current:Task|null;next:Task|null;lastError:Task|null;failed:number;queued:number;
   finished:number[];ready:Ready[];prediction:{percent:number;remaining:number}|null};
 
 export function useOffice(){
