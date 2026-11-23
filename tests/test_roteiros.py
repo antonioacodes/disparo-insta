@@ -143,3 +143,25 @@ class RoteirosTest(unittest.TestCase):
             self.assertTrue((producao.root()/self.ident/'final.mp4').is_file())
             self.assertEqual(roteiros.command(self.db,'list','',{})[0]['status'],'aprovado_para_publicacao')
             self.assertIsNone(next_job())
+
+    def test_live_progress_follows_checkpoint_and_times_the_current_scene(self):
+        import json
+        now=time.time()
+        roteiros.enqueue(self.db,self.ident,'planejamento')
+        self.db.execute("UPDATE roteiro_etapas SET resultado=?,inicio=?,fim=?",(json.dumps([{},{}]),now-80,now-70))
+        self.db.execute("UPDATE jobs SET state='done'")
+        roteiros.enqueue(self.db,self.ident,'escrita',0)
+        self.db.execute("UPDATE roteiro_etapas SET resultado='{}',inicio=?,fim=? WHERE etapa='escrita'",(now-70,now-10))
+        self.db.execute("UPDATE jobs SET state='done'")
+        roteiros.enqueue(self.db,self.ident,'escrita',1)
+        job=self.db.execute('SELECT MAX(id) FROM jobs').fetchone()[0]
+        self.db.execute("UPDATE jobs SET state='running' WHERE id=?",(job,))
+        self.db.execute("UPDATE roteiro_etapas SET inicio=? WHERE job=?",(now-10,job))
+        self.db.execute("INSERT INTO agentes_eventos(agente,job,evento,instante) VALUES('Roteiros',?,'heartbeat',?)",(job,now))
+        task=roteiros.overview(self.db)['progress']
+        self.assertEqual((task['done'],task['total']),(2,10))
+        self.assertIn('cena 2 de 2',task['label'])
+        self.assertAlmostEqual(task['stageRemaining'],50,delta=1)
+        self.assertIsNone(task['remaining'])
+        self.db.execute("UPDATE agentes_eventos SET instante=?",(now-100,))
+        self.assertIsNone(roteiros.overview(self.db)['progress']['stageRemaining'])

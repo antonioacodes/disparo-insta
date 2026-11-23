@@ -289,11 +289,52 @@ def command(db,action,ident,payload):
         raise
 
 
+def script_progress(db,current,status):
+    from statistics import median
+
+    labels={'planejamento':'Planejando as cenas','escrita':'Escrevendo a narração',
+            'broll':'Selecionando termos de busca','duracao':'Calculando a duração',
+            'titulos':'Criando títulos','ganchos':'Preparando ganchos',
+            'descricao':'Escrevendo a descrição','tags':'Escolhendo as tags'}
+    row=db.execute("""SELECT b.dados FROM roteiros r JOIN briefings b ON b.id=r.briefing
+        WHERE r.id=?""",(current['roteiro'],)).fetchone()
+    brief=json.loads(row[0])
+    checkpoints=db.execute("SELECT etapa,resultado FROM roteiro_etapas WHERE roteiro=? AND resultado IS NOT NULL",
+                           (current['roteiro'],)).fetchall()
+    plan=next((json.loads(result) for stage,result in checkpoints if stage=='planejamento'),None)
+    scenes=len(plan if plan is not None else brief['estrutura'])
+    remaining={stage:scenes if stage in ('escrita','broll') else 1 for stage in labels}
+    total=sum(remaining.values())
+    for stage,_ in checkpoints:
+        remaining[stage]-=1
+    stage=current['etapa']
+    label=labels[stage]
+    if stage in ('escrita','broll'):
+        label+=f" · cena {current['ordem']+1} de {scenes}"
+    elapsed=max(0,int(time.time()-current['inicio'])) if current['inicio'] and status=='Trabalhando' else None
+    estimate=None
+    stage_estimate=None
+    if elapsed is not None:
+        durations={}
+        for name,count in remaining.items():
+            if count>0:
+                samples=db.execute("""SELECT fim-inicio FROM roteiro_etapas WHERE etapa=? AND fim>inicio
+                    AND resultado IS NOT NULL ORDER BY fim DESC LIMIT 20""",(name,)).fetchall()
+                if samples:
+                    durations[name]=median(r[0] for r in samples)
+        if stage in durations and durations[stage]>elapsed:
+            stage_estimate=round(durations[stage]-elapsed)
+            if all(name in durations for name,count in remaining.items() if count>0):
+                estimate=round(sum(durations[name]*count for name,count in remaining.items() if count>0)-elapsed)
+    return dict(title=brief['titulo_provisorio'],label=label,status=status,done=len(checkpoints),
+                total=total,elapsed=elapsed,remaining=estimate,stageRemaining=stage_estimate)
+
+
 def overview(db):
     waiting=db.execute("SELECT count(*) FROM roteiros WHERE status='aguardando_aprovacao'").fetchone()[0]
     producing=db.execute("SELECT count(*) FROM roteiros WHERE status='em_producao'").fetchone()[0]
-    current=db.execute("""SELECT j.state,e.etapa,MAX(a.instante) beat FROM jobs j JOIN roteiro_etapas e ON e.job=j.id
-        LEFT JOIN agentes_eventos a ON a.job=j.id WHERE j.state IN ('running','queued')
+    current=db.execute("""SELECT j.state,e.etapa,e.roteiro,e.ordem,e.inicio,MAX(a.instante) beat FROM jobs j JOIN roteiro_etapas e ON e.job=j.id
+        LEFT JOIN agentes_eventos a ON a.job=j.id WHERE j.state IN ('running','queued') AND e.resultado IS NULL
         GROUP BY j.id ORDER BY (j.state='running') DESC,j.id LIMIT 1""").fetchone()
     status='Ocioso' if config()['ROTEIRO_MODELO'] else 'Ainda não configurado'
     if current:
@@ -305,4 +346,5 @@ def overview(db):
         status='Aguardando aprovação'
     elif db.execute("SELECT 1 FROM roteiros WHERE status='erro' LIMIT 1").fetchone():
         status='Erro'
-    return dict(status=status,etapa=current['etapa'] if current else None,aguardando=waiting,produzindo=producing)
+    return dict(status=status,etapa=current['etapa'] if current else None,aguardando=waiting,produzindo=producing,
+                progress=script_progress(db,current,status) if current else None)
