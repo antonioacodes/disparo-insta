@@ -538,7 +538,7 @@ if __name__ == "__main__":
     roteiros.init(db)
     if opts.action == "roteiros":
         try:
-            print(json.dumps(roteiros.command(db,opts.args[0],opts.args[1],json.loads(sys.stdin.read() or '{}'))))
+            print(json.dumps(roteiros.command(db,opts.args[0],opts.args[1],json.loads(opts.args[2]) if len(opts.args)>2 else {})))
         except (ValueError,KeyError,TypeError) as exc:
             print(json.dumps({"error":str(exc)}))
     elif opts.action == "trend-manage":
@@ -559,6 +559,7 @@ if __name__ == "__main__":
         online = audience_status() != "offline" and beat.exists() and time.time()-beat.stat().st_mtime < 45
         db.execute("BEGIN")
         result = snapshot(db, WORK, online)
+        result["scripts"]=roteiros.overview(db)
         result["audienceStatus"] = audience_status() if online else "offline"
         active=db.execute("SELECT * FROM trend_reports WHERE state NOT IN ('Concluída','Erro','Interrompida') ORDER BY id LIMIT 1").fetchone()
         cfg=trends.settings()

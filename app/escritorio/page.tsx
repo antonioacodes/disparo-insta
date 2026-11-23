@@ -9,6 +9,7 @@ import {Department,ActionCard,StatusIcon} from './Department';
 import {Audience} from '../studio/Audience';
 import {TrendProgress} from './TrendProgress';
 import {Trends} from './Trends';
+import {Roteiros} from './Roteiros';
 import {Ambience} from './Ambience';
 import {loadScene} from './assets';
 
@@ -65,7 +66,7 @@ export default function Office(){
   const done=data?.finished.filter(at=>at>=start.getTime()/1000).length??0;
   const pending=data?.queued??0;
   const rooms=map.rooms.map((r,i)=>{
-    const status=i===1?(failed?'Sem conexão':data?.trendStatus??'Conectando'):i!==0?'Ainda não configurado':failed?'Sem conexão':data?.status??'Conectando';
+    const status=i===3?(failed?'Sem conexão':data?.scripts?.status??'Conectando'):i===1?(failed?'Sem conexão':data?.trendStatus??'Conectando'):i!==0?'Ainda não configurado':failed?'Sem conexão':data?.status??'Conectando';
     return {...r,status,working:status==='Trabalhando'};
   });
   const [walkers,setWalkers]=useState(()=>map.rooms.map(r=>({x:r.x,y:r.y,dir:'down',stride:0,moving:false})));
@@ -125,6 +126,7 @@ export default function Office(){
   const [view,setView]=useState<'home'|'edit'|'ready'|'info'>('home');
   const [newProject,setNewProject]=useState('');
   function details(index:number){
+    if(index===3)return <span>{data?.scripts?.etapa||rooms[index].status}</span>;
     if(index===1)return <span>{data?.trendTask?<><b>{data.trendTask.query}</b><TrendProgress progress={data.trendTask.progress}/></>:rooms[1].status}</span>;
     if(index!==0)return <span>Integração de {rooms[index].name.toLowerCase()} ainda não disponível.</span>;
     return <><span>{rooms[0].status} · {current?.stage||current?.label||'Sem tarefa em execução'}</span>
@@ -170,12 +172,12 @@ export default function Office(){
     const entities=people.map((r,i)=>({x:r.x,y:r.y,draw:()=>{
       if(r.seated){
         // The north-facing backrest is between the viewer and the seated agent.
-        scene.actor(ctx,i,r.x,r.y-0.54,'up',r.working?'Digitar':'Sentar',frame);
+        scene.actor(ctx,i===3?0:i,r.x,r.y-0.54,'up',r.working?'Digitar':'Sentar',frame);
         scene.tile(ctx,18,r.x,r.y);
       }else{
         const walker=walkers[i];
         const moving=r.status==='Ocioso'&&walker.moving;
-        scene.actor(ctx,i,r.x,r.y,r.status==='Ocioso'?walker.dir:'down',moving?'Andar':'Café',moving?Math.floor(walker.stride*8):frame);
+        scene.actor(ctx,i===3?0:i,r.x,r.y,r.status==='Ocioso'?walker.dir:'down',moving?'Andar':'Café',moving?Math.floor(walker.stride*8):frame);
       }
     }}));
     entities.push({x:avatar.x,y:avatar.y,draw:()=>scene.actor(ctx,3,avatar.x,avatar.y,facing.current,walking.current?'Andar':'Parado',walking.current?Math.floor(distance.current*8):frame)});
@@ -206,7 +208,7 @@ export default function Office(){
   return <main className={styles.office} aria-label="Escritório virtual">
     <header className={styles.hud}><Link href="/studio" className={styles.back} aria-label="Voltar ao Studio" title="Voltar ao Studio">←</Link>
     <div><strong>Escritório virtual</strong><small>{today?.toLocaleDateString('pt-BR',{day:'numeric',month:'short'})}</small></div>
-    <div className={styles.stats}><span>{data?pending:'—'} na fila</span><span>{data?ready.length:'—'} vídeos prontos</span></div>
+    <div className={styles.stats}>{data?.scripts&&<><span>{data.scripts.aguardando} roteiros para aprovar</span><span>{data.scripts.produzindo} em produção</span></>}<span>{data?pending:'—'} na fila</span><span>{data?ready.length:'—'} vídeos prontos</span></div>
     <div className={styles.overall}><strong>{data?done+' concluídas '+(week?'nesta semana':'hoje'):'Consultando a fila do Studio'}</strong>
       {total>0&&<progress value={done} max={total}/>}<small>{rooms[0].status}</small></div>
     <label><select aria-label="Período do escritório" value={week?'week':'today'} onChange={e=>setWeek(e.target.value==='week')}><option value="today">Hoje</option><option value="week">Esta semana</option></select></label>
@@ -288,8 +290,8 @@ export default function Office(){
       <button autoFocus onClick={()=>select(null)} aria-label="Fechar detalhes">×</button>
       {room===-1&&<><h2>Central de operações</h2>{rooms.map((r,i)=><section key={r.name} className={styles.detail}><h3>{r.person} · {r.name}</h3>{details(i)}</section>)}</>}
       {room!==null&&room>=0&&<Department {...rooms[room]} onBack={view==='home'?undefined:()=>setView('home')}>
-        {room===1&&<Trends/>}
-        {room!==1&&view==='home'&&<>
+        {room===1&&<Trends/>}{room===3&&<Roteiros/>}
+        {room!==1&&room!==3&&view==='home'&&<>
           {room===0&&<div className={styles.editActivity}><strong>{current?.stage||current?.label||(data?'Sem tarefa em execução':'Consultando a fila…')}</strong><small>{data?pending+' na fila':'Consultando o Studio'}{rooms[0].working?' · '+eta:''}</small>{rooms[0].working&&<progress aria-label="Progresso estimado da edição" value={prediction?.percent} max={100}/>}</div>}
           <div className={styles.actions}>{room===0?<>
             <ActionCard title="Criar projeto" caption="Escolher o vídeo e definir o estilo dos cortes" onClick={()=>{setNewProject('');setView('edit')}}/>

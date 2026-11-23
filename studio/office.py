@@ -33,7 +33,7 @@ def snapshot(db, work, online):
         p.title project,c.title clip,CASE WHEN c.id IS NULL THEN p.duration ELSE c.end-c.start END units
         FROM jobs j LEFT JOIN job_progress t ON t.job=j.id LEFT JOIN clips c ON c.id=j.entity
         LEFT JOIN projects p ON p.id=COALESCE(c.project,j.entity)
-        WHERE j.state IN ('queued','running','failed') ORDER BY (j.kind='purge') DESC,j.id""").fetchall()
+        WHERE j.kind!='roteiro' AND j.state IN ('queued','running','failed') ORDER BY (j.kind='purge') DESC,j.id""").fetchall()
     def describe(j):
         return {"label":LABELS.get(j["kind"],j["kind"]), "project":j["project"], "clip":j["clip"],
                 "stage":j["stage"], "started":j["started"], "queuedAt":j["queued_at"], "error":j["error"]}
@@ -68,7 +68,7 @@ def snapshot(db, work, online):
     recent = db.execute("""SELECT 'Lia' agent, j.id id, j.kind kind, f.finished at,
         COALESCE(c.title,p.title,'') title FROM job_finish f JOIN jobs j ON j.id=f.job
         LEFT JOIN clips c ON c.id=j.entity LEFT JOIN projects p ON p.id=COALESCE(c.project,j.entity)
-        WHERE j.state='done' AND f.finished>=?
+        WHERE j.kind!='roteiro' AND j.state='done' AND f.finished>=?
         UNION ALL SELECT 'Caio',r.id,'research',t.finished,r.query FROM trend_reports r
         JOIN trend_timing t ON t.report=r.id WHERE r.state='Concluída' AND t.finished>=?
         ORDER BY at DESC LIMIT 50""",(now-7*86400,now-7*86400))

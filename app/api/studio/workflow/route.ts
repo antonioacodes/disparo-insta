@@ -11,6 +11,9 @@ async function worker(args:string[]) {
 
 export async function GET(request:Request) {
   const project = new URL(request.url).searchParams.get('history');
+  if(new URL(request.url).searchParams.has('roteiros')){
+    try{return NextResponse.json(JSON.parse(await worker(['roteiros','list',''])))}catch{return NextResponse.json({error:'Roteiros indisponíveis.'},{status:503})}
+  }
   if(project !== null){
     if(!/^[a-f0-9]{32}$/.test(project)) return NextResponse.json({error:'Projeto inválido.'},{status:400});
     try {return NextResponse.json(JSON.parse(await worker(['history',project])));}
@@ -22,7 +25,13 @@ export async function GET(request:Request) {
 
 export async function POST(request:Request) {
   try {
-    const {action,id,title,start,end,corrections,preset,deletePreview,url} = await request.json();
+    const {action,id,title,start,end,corrections,preset,deletePreview,url,payload} = await request.json();
+    if(typeof action==='string' && action.startsWith('roteiros/')){
+      const body=JSON.stringify(payload??{});
+      if(body.length>40000)return NextResponse.json({error:'Briefing muito extenso.'},{status:400});
+      const result=JSON.parse(await worker(['roteiros',action.slice('roteiros/'.length),String(id??''),body]));
+      return NextResponse.json(result,{status:result.error?409:200});
+    }
     if(action==='import' && typeof url==='string' && url.startsWith('https://') && url.length<=4096 && typeof title==='string'){
       return NextResponse.json({project:await worker(['import',url,title.trim().slice(0,200)||'Vídeo por link',JSON.stringify(preset||{})])},{status:202});
     }

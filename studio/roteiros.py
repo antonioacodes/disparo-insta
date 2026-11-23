@@ -267,3 +267,22 @@ def command(db,action,ident,payload):
     except BaseException:
         db.rollback()
         raise
+
+
+def overview(db):
+    waiting=db.execute("SELECT count(*) FROM roteiros WHERE status='aguardando_aprovacao'").fetchone()[0]
+    producing=db.execute("SELECT count(*) FROM roteiros WHERE status='em_producao'").fetchone()[0]
+    current=db.execute("""SELECT j.state,e.etapa,MAX(a.instante) beat FROM jobs j JOIN roteiro_etapas e ON e.job=j.id
+        LEFT JOIN agentes_eventos a ON a.job=j.id WHERE j.state IN ('running','queued')
+        GROUP BY j.id ORDER BY (j.state='running') DESC,j.id LIMIT 1""").fetchone()
+    status='Ocioso' if config()['ROTEIRO_MODELO'] else 'Ainda não configurado'
+    if current:
+        if current['state']=='queued':
+            status='Esperando'
+        else:
+            status='Trabalhando' if current['beat'] and time.time()-current['beat']<=65 else 'Interrompido'
+    elif waiting:
+        status='Aguardando aprovação'
+    elif db.execute("SELECT 1 FROM roteiros WHERE status='erro' LIMIT 1").fetchone():
+        status='Erro'
+    return dict(status=status,etapa=current['etapa'] if current else None,aguardando=waiting,produzindo=producing)
