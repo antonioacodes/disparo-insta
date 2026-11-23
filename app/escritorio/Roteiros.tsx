@@ -2,7 +2,7 @@ import {useEffect,useState} from 'react';
 import styles from './office.module.css';
 
 type Scene={id:string;tipo:string;legenda_destaque:string;narracao:string;verificar:boolean;fontes:string[]};
-type Item={id:string;versao:number;titulo:string;status:string;comentario:string|null;producao:{etapa:string;erro:string|null;chamadas:number;pronto:boolean;etapas:{etapa:string;cena:number;inicio:number|null;fim:number|null}[];assets:{origem:string;autor:string;url:string}[]}|null;roteiro:{cenas:Scene[]}|null};
+type Item={id:string;versao:number;titulo:string;status:string;comentario:string|null;producao:{etapa:string;erro:string|null;chamadas:number;pronto:boolean;legendas:{cena:number;srt:string;segundos:number}[];etapas:{etapa:string;cena:number;inicio:number|null;fim:number|null}[];assets:{origem:string;autor:string;url:string}[]}|null;roteiro:{cenas:Scene[]}|null};
 const endpoint='/api/studio/workflow';
 export function Roteiros({publicacoes=false}:{publicacoes?:boolean}){
   const [rows,setRows]=useState<Item[]>([]),[selected,setSelected]=useState(''),[creating,setCreating]=useState(false);
@@ -45,7 +45,7 @@ export function Roteiros({publicacoes=false}:{publicacoes?:boolean}){
         <details><summary>Tempos e créditos</summary>{item.producao.etapas.map(e=><p key={e.etapa+e.cena}>{e.etapa} · cena {e.cena+1} · {e.inicio&&e.fim?Math.round(e.fim-e.inicio)+' s':'Sem dados ainda'}</p>)}
         {item.producao.assets.map((a,i)=><p key={i}>{a.url?<a href={a.url} target="_blank" rel="noreferrer">{a.autor} · Pexels</a>:a.origem}</p>)}</details>
         {item.status==='aguardando_revisao_video'&&<><label>Comentário de revisão<textarea value={comment} onChange={e=>setComment(e.target.value)}/></label>
-          {item.roteiro?.cenas.map((c,i)=><details key={c.id}><summary>Cena {i+1} · {c.tipo}</summary><p>{c.legenda_destaque}</p>
+          {item.roteiro?.cenas.map((c,i)=><details key={c.id}><summary>Cena {i+1} · {c.tipo}</summary><pre>{item.producao?.legendas.find(l=>l.cena===i)?.srt||c.legenda_destaque}</pre>
           {['narracao','broll','legendas'].map(parte=><button key={parte} disabled={busy||!comment.trim()} onClick={()=>act('regenerar',{cena:i,parte,comentario:comment})}>Refazer {parte}</button>)}</details>)}
           <label><input type="checkbox" checked={rotulagem} onChange={e=>setRotulagem(e.target.checked)}/> Rotular uso de IA</label>
           <small>Confira a política de rotulagem de cada plataforma antes de publicar.</small>

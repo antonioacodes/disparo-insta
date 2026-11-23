@@ -448,12 +448,13 @@ def heartbeat():
 def run_script_stage(job,etapa):
     import threading
     stop=threading.Event()
+    agent = "Edição" if job["kind"] == "producao" else "Roteiros"
     def signal():
         with sqlite3.connect(WORK/"studio.sqlite",isolation_level=None,timeout=20) as conn:
             while not stop.wait(30):
-                conn.execute("INSERT INTO agentes_eventos(agente,job,evento,instante) VALUES('Roteiros',?,'heartbeat',?)",(job['id'],time.time()))
+                conn.execute("INSERT INTO agentes_eventos(agente,job,evento,instante) VALUES(?,?,'heartbeat',?)",(agent,job['id'],time.time()))
     db.execute("UPDATE roteiro_etapas SET inicio=? WHERE job=?",(time.time(),job['id']))
-    db.execute("INSERT INTO agentes_eventos(agente,job,evento,instante) VALUES('Roteiros',?,?,?)",(job['id'],etapa,time.time()))
+    db.execute("INSERT INTO agentes_eventos(agente,job,evento,instante) VALUES(?,?,?,?)",(agent,job['id'],etapa,time.time()))
     beat=threading.Thread(target=signal,daemon=True)
     beat.start()
     try:

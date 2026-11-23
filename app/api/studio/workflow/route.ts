@@ -27,9 +27,12 @@ export async function POST(request:Request) {
   try {
     const {action,id,title,start,end,corrections,preset,deletePreview,url,payload} = await request.json();
     if(typeof action==='string' && action.startsWith('roteiros/')){
+      const operation=action.slice('roteiros/'.length);
+      if (!['briefing','gerar','aprovar','rejeitar','nova-versao','produzir','regenerar','aprovar-video','retomar'].includes(operation))
+        return NextResponse.json({error:'Ação indisponível.'},{status:400});
       const body=JSON.stringify(payload??{});
       if(body.length>40000)return NextResponse.json({error:'Briefing muito extenso.'},{status:400});
-      const result=JSON.parse(await worker(['roteiros',action.slice('roteiros/'.length),String(id??''),body]));
+      const result=JSON.parse(await worker(['roteiros',operation,String(id??''),body]));
       return NextResponse.json(result,{status:result.error?409:200});
     }
     if(action==='import' && typeof url==='string' && url.startsWith('https://') && url.length<=4096 && typeof title==='string'){

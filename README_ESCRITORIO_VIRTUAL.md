@@ -392,3 +392,9 @@ O ensaio usa CPU, uma thread e o mesmo exemplo de tendência para ambos. Ele med
 No escritório, clique em Caio e em **Pesquisar tendências**. O YouTube pesquisa vídeos publicados no período e disponíveis na região selecionada. A Twitch pesquisa canais ao vivo no momento da consulta. Os links e nomes vêm das APIs oficiais. Os resultados ficam visíveis enquanto o modelo local prepara a análise.
 
 Na raiz do Studio, configure no arquivo .env ou no ambiente do serviço YOUTUBE_API_KEY (YouTube Data API v3), TWITCH_CLIENT_ID e TWITCH_CLIENT_SECRET (aplicativo Twitch Helix), conforme as fontes desejadas. Configure STUDIO_TRENDS_MODEL com o identificador instalado no Ollama local depois da medição. O worker usa o serviço em 127.0.0.1:11434 com uma thread de CPU. Inicie o worker normal do Studio. Consultas iguais reutilizam o resultado do YouTube por 24 horas e o de lives por 15 minutos. Os relatórios expiram em 30 dias. A fila de tendências é independente da edição. Na VPS, o serviço Ollama também deve receber prioridade de CPU menor que o worker de vídeo.
+
+## Departamento de Roteiros
+
+Bia ocupa a quarta sala. O briefing gera uma versão revisável do roteiro. Depois da aprovação humana, o Studio pode produzir as cenas, narrar, legendar e montar o vídeo. A segunda aprovação encaminha o vídeo ao departamento de Publicações. O comando de publicação permanece bloqueado até a confirmação da proteção de acesso.
+
+Caio pode coletar links durante a edição de Lia. A geração de roteiro adquire a mesma trava dos trabalhos pesados de vídeo e a trava compartilhada de inferência. A narração e a montagem passam pelo worker do Studio. Consulte [a configuração do departamento](CONFIGURACAO_ROTEIROS.md).

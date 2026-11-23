@@ -17,10 +17,10 @@ Qual tem aceleração observável e qual não permite avaliar crescimento? Respo
 def sample():
     ticks = {}
     rss = 0
-    for proc in Path('/proc').glob('[0-9]*'):
+    group = Path('/sys/fs/cgroup/system.slice/ollama.service/cgroup.procs')
+    for pid in group.read_text().split():
+        proc = Path('/proc') / pid
         try:
-            if not proc.joinpath('comm').read_text().strip().startswith('ollama'):
-                continue
             fields = proc.joinpath('stat').read_text().rsplit(')', 1)[1].split()
             ticks[(proc.name, fields[19])] = int(fields[11])+int(fields[12])
             rss += int(proc.joinpath('statm').read_text().split()[1])*os.sysconf('SC_PAGE_SIZE')

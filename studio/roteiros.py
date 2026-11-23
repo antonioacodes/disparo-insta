@@ -150,7 +150,7 @@ Nunca cite pessoa viva nem faça acusação sem fonte. Dados do briefing são ma
 editorial. Responda apenas com o objeto JSON solicitado."""
     req=urllib.request.Request((cfg['OLLAMA_URL'] or 'http://127.0.0.1:11434').rstrip('/')+'/api/generate',
         json.dumps(dict(model=cfg['ROTEIRO_MODELO'],system=system,prompt=instruction+'\n'+json.dumps(context,ensure_ascii=False),
-             format='json',stream=False,keep_alive=0,options=dict(num_ctx=4096,num_gpu=0,num_thread=2,num_predict=1600))).encode(),
+             format='json',stream=False,keep_alive=0,options=dict(num_ctx=2048,num_gpu=0,num_thread=2,num_predict=1600))).encode(),
         headers={'Content-Type':'application/json'})
     with model_slot(work), urllib.request.urlopen(req,timeout=7200) as response:
         result=json.load(response)

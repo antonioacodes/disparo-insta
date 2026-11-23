@@ -23,6 +23,7 @@ def init(db):
     db.executescript("""
     CREATE TABLE IF NOT EXISTS producao_etapas(job INTEGER PRIMARY KEY REFERENCES jobs(id),
       producao TEXT REFERENCES producoes_video(id), etapa TEXT, cena INTEGER, inicio REAL, fim REAL);
+    CREATE TABLE IF NOT EXISTS producao_legendas(producao TEXT, cena INTEGER, srt TEXT NOT NULL, segundos REAL NOT NULL, PRIMARY KEY(producao,cena));
     CREATE TABLE IF NOT EXISTS pexels_consultas(instante REAL, producao TEXT, restante INTEGER, reinicio INTEGER);
     CREATE INDEX IF NOT EXISTS chamadas_por_data ON pexels_consultas(instante);
     """)
@@ -183,6 +184,8 @@ def process(db,work,job):
     db.execute('BEGIN IMMEDIATE')
     try:
         db.execute('UPDATE producao_etapas SET fim=? WHERE job=?',(time.time(),job['id']))
+        if stage=='legendas':
+            db.execute('INSERT OR REPLACE INTO producao_legendas VALUES(?,?,?,?)',(pid,i,(media/(name+'.srt')).read_text(),duration))
         if stage=='finalizar':
             transition(db,pid,'aguardando_revisao_video')
             db.execute("UPDATE producoes_video SET etapa='concluida',fim=?,arquivo_final=? WHERE id=?",(time.time(),str(folder/'final.mp4'),pid))
@@ -209,7 +212,8 @@ def review(db,pid):
     steps=[dict(r) for r in db.execute('SELECT etapa,cena,inicio,fim FROM producao_etapas WHERE producao=? ORDER BY job',(pid,))]
     assets=[dict(r) for r in db.execute('SELECT cena,origem,url,autor,licenca FROM assets_producao WHERE producao=? ORDER BY cena',(pid,))]
     return dict(etapa=row['etapa'],erro=row['erro'],chamadas=row['chamadas_pexels'],etapas=steps,
-                pronto=bool(row['arquivo_final']),assets=assets)
+                pronto=bool(row['arquivo_final']),assets=assets,legendas=[dict(r) for r in db.execute(
+                    'SELECT cena,srt,segundos FROM producao_legendas WHERE producao=? ORDER BY cena',(pid,))])
 
 
 def regenerate(db,ident,payload):
