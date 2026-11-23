@@ -301,7 +301,7 @@ export default function Office(){
     {rooms.map((r,i)=><button key={r.name} className={styles.door} aria-label={'Abrir sala de '+r.name}
       style={{left:(r.signX*32-28)/width*100+'%',top:(r.signY*32+1)/height*100+'%',width:80/width*100+'%',height:14/height*100+'%'}} onClick={()=>select(i)}/>)}
     {visitors.map(v=><span key={v.id} className={styles.visitor} style={anchor(v.x,v.y-.5)}>{v.name}</span>)}
-    <span className={styles.you} style={anchor(avatar.x,avatar.y-.5)}>Você</span>
+    <span className={styles.you} style={anchor(avatar.x,avatar.y-.5)}>{me?.name||'Você'}</span>
     <button className={styles.board} style={anchor(12,1.1)} onClick={()=>select(-1)}>
       <b>Central de operações</b>{ready.length>0&&<span className={styles.ready}>{ready.length} {ready.length===1?'vídeo pronto':'vídeos prontos'}</span>}
 

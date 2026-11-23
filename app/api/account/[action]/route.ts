@@ -3,7 +3,7 @@ import {NextRequest,NextResponse} from 'next/server';
 export const dynamic='force-dynamic';
 const cookie='studio_session';
 async function handle(req:NextRequest,action:string){
-  if(!(req.method==='GET'?['session','users']:['signin','signout','create','presence','password']).includes(action))return new NextResponse(null,{status:404});
+  if(!(req.method==='GET'?['session','users']:['signin','signout','create','presence','password','rename']).includes(action))return new NextResponse(null,{status:404});
   if(req.method==='POST'&&(!req.headers.get('content-type')?.includes('application/json')||req.headers.get('sec-fetch-site')==='cross-site'))return new NextResponse(null,{status:403});
   try{
     const payload=req.method==='GET'?{}:await req.json();

@@ -64,6 +64,11 @@ def handle(action,p):
     if action=='signout':
         db.execute('DELETE FROM sessions WHERE token=?',(key,))
         db.execute('DELETE FROM visits WHERE session=?',(key,))
+    elif action=='rename' and u['admin']:
+        name=p.get('name','')
+        if not isinstance(name,str) or not 1<=len(name.strip())<=40:
+            raise ValueError('Use um nome de 1 a 40 caracteres.')
+        db.execute('UPDATE users SET name=? WHERE id=?',(name.strip(),u['id']))
     elif action=='password':
         db.execute('BEGIN IMMEDIATE')
         account=db.execute('SELECT salt,password FROM users WHERE id=?',(u['id'],)).fetchone()

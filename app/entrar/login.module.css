@@ -1,0 +1,11 @@
+.screen{min-height:100dvh;display:grid;place-items:center;padding:20px;background:radial-gradient(ellipse at top,#405954,#243440 75%)}
+.panel{width:min(100%,410px);color:#233441;background:#fff9ec;border:3px solid #475766;border-radius:16px;overflow:hidden;box-shadow:0 10px 0 #18273155,0 20px 60px #15202a55}
+.panel header{background:#273946;color:#ffdfa1;display:flex;align-items:center;gap:12px;padding:17px 24px;font-weight:700}
+.panel form{display:grid;gap:18px;padding:clamp(20px,5vw,32px)}
+.panel h1{color:#233441;margin:0 0 4px;font-size:1.65rem}
+.panel label{display:grid;gap:6px;font-weight:650}
+.panel input{width:100%;border:1px solid #82918f;background:#fffdf7;border-radius:8px;padding:12px;color:#233441;font:inherit}
+.panel button{display:flex;align-items:center;justify-content:center;gap:10px;border:0;background:#275c50;color:white;border-radius:9px;padding:12px;font:inherit;font-weight:700;cursor:pointer}
+.panel :focus-visible{outline:3px solid #398674;outline-offset:2px}
+.panel button:disabled{opacity:.7}
+.panel p{margin:0;color:#943c31}
