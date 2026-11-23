@@ -21,6 +21,7 @@ export async function middleware(req:NextRequest){
     }catch{return new NextResponse('Serviço de contas indisponível',{status:503})}
   }
   if(path.startsWith('/api/')&&!navigation)return NextResponse.json({error:'Entre no Studio para continuar.'},{status:401});
-  return new NextResponse(null,{status:303,headers:{Location:'/entrar','Cache-Control':'private, no-store'}});
+  const origin=process.env.STUDIO_PUBLIC_ORIGIN||(process.env.NODE_ENV==='production'?'https://painel.acodes.pro':req.nextUrl.origin);
+  return NextResponse.redirect(new URL('/entrar',origin),{status:303,headers:{'Cache-Control':'private, no-store'}});
 }
 export const config={matcher:['/((?!_next/static/|_next/image$|favicon\\.ico$).*)']};
