@@ -398,3 +398,7 @@ Na raiz do Studio, configure no arquivo .env ou no ambiente do serviço YOUTUBE_
 Bia ocupa a quarta sala. O briefing gera uma versão revisável do roteiro. Depois da aprovação humana, o Studio pode produzir as cenas, narrar, legendar e montar o vídeo. A segunda aprovação encaminha o vídeo ao departamento de Publicações. O comando de publicação permanece bloqueado até a confirmação da proteção de acesso.
 
 Caio pode coletar links durante a edição de Lia. A geração de roteiro adquire a mesma trava dos trabalhos pesados de vídeo e a trava compartilhada de inferência. A narração e a montagem passam pelo worker do Studio. Consulte [a configuração do departamento](CONFIGURACAO_ROTEIROS.md).
+
+### Usuários do escritório
+
+Na raiz da aplicação na VPS, execute `python3 -m studio.accounts bootstrap` em um terminal interativo para cadastrar o primeiro administrador. O comando pede a senha sem exibi-la e recusa uma segunda inicialização. Entre em /entrar e abra **Usuários** na barra do escritório para criar as contas dos operadores. Cada pessoa recebe um login próprio. O link público de entrada não cria usuários. As sessões duram doze horas e **Sair** encerra a sessão. A presença no mapa expira após vinte segundos sem sinal. Configure STUDIO_INTERNAL_PORT com a porta local do Next quando o proxy usar uma porta diferente de PORT.

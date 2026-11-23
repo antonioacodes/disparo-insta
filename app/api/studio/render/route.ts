@@ -1,3 +1,4 @@
+import {requireStudioSession} from '../../../../lib/studioAccount';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { execFile } from 'child_process';
@@ -8,6 +9,8 @@ type Cut={start:number;end:number;approved:boolean;text?:string};
 type CaptionStyle='classic'|'minimal'|'highlight';
 export const runtime='nodejs';
 export async function POST(request:Request){
+  const denied=await requireStudioSession();if(denied)return denied;
+
  const body=await request.json().catch(()=>({}));
  const mediaId=typeof body.mediaId==='string'?body.mediaId:'';
  const cuts=Array.isArray(body.cuts)?body.cuts as Cut[]:[];

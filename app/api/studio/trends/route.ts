@@ -1,3 +1,4 @@
+import {requireStudioSession} from '../../../../lib/studioAccount';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {NextResponse} from 'next/server';
@@ -9,10 +10,14 @@ async function call(args:string[]){
   return JSON.parse(stdout);
 }
 export async function GET(){
+  const denied=await requireStudioSession();if(denied)return denied;
+
   try{return NextResponse.json(await call(['trend-list']))}
   catch{return NextResponse.json({error:'Não foi possível carregar as pesquisas.'},{status:503})}
 }
 export async function POST(request:Request){
+  const denied=await requireStudioSession();if(denied)return denied;
+
   const origin=request.headers.get('origin');
   if(origin && new URL(origin).host!==request.headers.get('host'))
     return NextResponse.json({error:'Origem inválida.'},{status:403});

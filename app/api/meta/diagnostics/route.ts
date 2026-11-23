@@ -1,6 +1,9 @@
+import {requireStudioSession} from '../../../../lib/studioAccount';
 import { NextResponse } from 'next/server';
 
 export async function GET() {
+  const denied=await requireStudioSession();if(denied)return denied;
+
   const token = process.env.META_ACCESS_TOKEN;
   const version = process.env.META_API_VERSION || 'v27.0';
   if (!token) return NextResponse.json({ ok: false, stage: 'configuration', message: 'META_ACCESS_TOKEN não configurado no servidor.', required: ['META_APP_ID','META_APP_SECRET','META_REDIRECT_URI','META_ACCESS_TOKEN'] }, { status: 503 });
@@ -11,6 +14,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const denied=await requireStudioSession();if(denied)return denied;
+
   const body = await request.json().catch(() => ({}));
   const token = typeof body.token === 'string' ? body.token.trim() : '';
   const version = process.env.META_API_VERSION || 'v27.0';

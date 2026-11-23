@@ -1,3 +1,4 @@
+import {requireStudioSession} from '../../../../lib/studioAccount';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { NextResponse } from 'next/server';
@@ -6,6 +7,8 @@ const root = path.join(process.cwd(), 'storage', 'projects');
 async function ensure() { await fs.mkdir(root, { recursive: true }); }
 
 export async function GET() {
+  const denied=await requireStudioSession();if(denied)return denied;
+
   await ensure();
   const files = (await fs.readdir(root)).filter((file) => file.endsWith('.json'));
   const projects = await Promise.all(files.map(async (file) => JSON.parse(await fs.readFile(path.join(root, file), 'utf8'))));
@@ -13,6 +16,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const denied=await requireStudioSession();if(denied)return denied;
+
   const body = await request.json().catch(() => ({}));
   const title = typeof body.title === 'string' ? body.title.trim() : '';
   const brief = typeof body.brief === 'string' ? body.brief.trim() : '';
@@ -25,6 +30,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request:Request) {
+  const denied=await requireStudioSession();if(denied)return denied;
+
   const id = new URL(request.url).searchParams.get('id') || '';
   if (!/^project-\d+$/.test(id)) return NextResponse.json({error:'Projeto inválido.'},{status:400});
   await fs.rm(path.join(root,id+'.json'),{force:true});

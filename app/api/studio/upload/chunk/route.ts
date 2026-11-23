@@ -1,3 +1,4 @@
+import {requireStudioSession} from '../../../../../lib/studioAccount';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { NextResponse } from 'next/server';
@@ -6,7 +7,9 @@ export const runtime='nodejs';
 const maxChunk=1024*1024;
 const mediaRoot=path.join(process.cwd(),'storage','media');
 const metaRoot=path.join(process.cwd(),'storage','media-meta');
-export async function POST(request:Request){const h=request.headers;const uploadId=h.get('x-upload-id')||'';const index=Number(h.get('x-chunk-index'));const total=Number(h.get('x-total-chunks'));const encodedName=h.get('x-file-name-utf8');
+export async function POST(request:Request){
+  const denied=await requireStudioSession();if(denied)return denied;
+const h=request.headers;const uploadId=h.get('x-upload-id')||'';const index=Number(h.get('x-chunk-index'));const total=Number(h.get('x-total-chunks'));const encodedName=h.get('x-file-name-utf8');
 let originalName:string;
 try {
   originalName=path.basename(encodedName ? decodeURIComponent(encodedName) : h.get('x-file-name')||'upload.bin');

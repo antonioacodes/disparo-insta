@@ -1,3 +1,4 @@
+import {requireStudioSession} from '../../../../lib/studioAccount';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {NextResponse} from 'next/server';
@@ -10,6 +11,8 @@ async function worker(args:string[]) {
 }
 
 export async function GET(request:Request) {
+  const denied=await requireStudioSession();if(denied)return denied;
+
   const project = new URL(request.url).searchParams.get('history');
   if(new URL(request.url).searchParams.has('roteiros')){
     try{return NextResponse.json(JSON.parse(await worker(['roteiros','list',''])))}catch{return NextResponse.json({error:'Roteiros indisponíveis.'},{status:503})}
@@ -22,17 +25,18 @@ export async function GET(request:Request) {
   try {
     const office=new URL(request.url).searchParams.has('office');
     const result=JSON.parse(await worker([office?'office':'list']));
-    if(office)result.reviewEnabled=process.env.STUDIO_ACTIVITY_REVIEW_ENABLED==='1';
+    if(office)result.reviewEnabled=true;
     return NextResponse.json(result);
   }
   catch { return NextResponse.json({error:'Falha ao consultar a fila do Studio.'},{status:503}); }
 }
 
 export async function POST(request:Request) {
+  const denied=await requireStudioSession();if(denied)return denied;
+
   try {
     const {action,id,title,start,end,corrections,preset,deletePreview,url,payload} = await request.json();
     if(action==='activity-review'){
-      if(process.env.STUDIO_ACTIVITY_REVIEW_ENABLED!=='1')return NextResponse.json({error:'Decisões aguardam confirmação da proteção de acesso ao Studio.'},{status:403});
       if(!['briefing','script','video','preview','trend','job'].includes(payload?.kind)||!['approve','reject'].includes(payload?.decision)||typeof id!=='string'||id.length>100)
         return NextResponse.json({error:'Decisão inválida.'},{status:400});
       const result=JSON.parse(await worker(['activity-review',payload.kind,id,payload.decision,JSON.stringify(payload.options??{})]));

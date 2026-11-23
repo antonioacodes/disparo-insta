@@ -1,3 +1,4 @@
+import {requireStudioSession} from '../../../../../lib/studioAccount';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {open} from 'node:fs/promises';
@@ -5,6 +6,8 @@ import path from 'node:path';
 import {Readable} from 'node:stream';
 
 export async function GET(request:Request) {
+  const denied=await requireStudioSession();if(denied)return denied;
+
   const params = new URL(request.url).searchParams;
   const id = params.get('id') || '';
   const kind = params.get('kind');

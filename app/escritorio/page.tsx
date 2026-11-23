@@ -1,4 +1,5 @@
 'use client';
+import {usePresence} from './usePresence';
 import {ActivityInbox} from './ActivityInbox';
 import {BiaProgress} from './BiaProgress';
 import {useEffect,useRef,useState} from 'react';
@@ -56,7 +57,9 @@ export default function Office(){
   const canvas=useRef<HTMLCanvasElement>(null);
   const position=useRef<Point>(map.spawn), route=useRef<Point[]>([]), held=useRef<Point|null>(null);
   const facing=useRef('down'),distance=useRef(0),walking=useRef(false);
+  const {visitors,me}=usePresence(position,facing);
   const [avatar,move]=useState(map.spawn),[room,select]=useState<number|null>(null);
+  useEffect(()=>{if(me)move(position.current)},[me]);
   const [week,setWeek]=useState(false),[today,setToday]=useState<Date|null>(null),[frame,tick]=useState(0);
   useEffect(()=>{
     setToday(new Date());
@@ -189,6 +192,7 @@ export default function Office(){
       }
     }}));
     entities.push({x:avatar.x,y:avatar.y,draw:()=>scene.actor(ctx,3,avatar.x,avatar.y,facing.current,walking.current?'Andar':'Parado',walking.current?Math.floor(distance.current*8):frame)});
+    visitors.forEach(v=>entities.push({...v,draw:()=>scene.actor(ctx,3,v.x,v.y,v.facing,'Parado',frame)}));
     layers[0].data.forEach((gid,i)=>scene.tile(ctx,gid,i%cols,Math.floor(i/cols)));
     for(let y=0;y<rows;y++){
       for(let x=0;x<cols;x++){
@@ -209,7 +213,7 @@ export default function Office(){
       entities.filter(e=>Math.floor(e.y)===y).sort((a,b)=>a.y-b.y).forEach(e=>e.draw());
     }
     for(const zone of lightZones){
-      const occupied=[avatar,...people].some(p=>p.x+.5>=zone.x&&p.x+.5<zone.x+zone.w&&
+      const occupied=[avatar,...people,...visitors].some(p=>p.x+.5>=zone.x&&p.x+.5<zone.x+zone.w&&
         p.y+.5>=zone.y&&p.y+.5<zone.y+zone.h);
       const left=zone.x*size,top=zone.y*size,w=zone.w*size,h=zone.h*size;
       if(occupied){
@@ -237,7 +241,7 @@ export default function Office(){
       ctx.fillStyle='#ffefd4';ctx.fillRect(r.signX*size-28,r.signY*size+1,80,14);
       ctx.fillStyle='#384553';ctx.fillText(r.name,r.signX*size+12,r.signY*size+12);
     });
-  },[avatar,frame,scene,data,failed,walkers]);
+  },[avatar,frame,scene,data,failed,walkers,visitors]);
   const anchor=(x:number,y:number)=>({left:(x+.5)*size/width*100+'%',top:y*size/height*100+'%'});
   return <main className={styles.office} aria-label="Escritório virtual">
     <header className={styles.hud}><Link href="/studio" className={styles.back} aria-label="Voltar ao Studio" title="Voltar ao Studio">←</Link>
@@ -247,7 +251,7 @@ export default function Office(){
       {total>0&&<progress value={done} max={total}/>}<small>{rooms[0].status}</small></div>
     <label><select aria-label="Período do escritório" value={week?'week':'today'} onChange={e=>setWeek(e.target.value==='week')}><option value="today">Hoje</option><option value="week">Esta semana</option></select></label>
     <nav aria-label="Progresso por agente">{rooms.map((r,i)=><button key={r.name} onClick={()=>select(i)}><i style={{background:r.color}}/>{r.name}</button>)}
-    <button onClick={()=>select(-1)}>Central de operações ↗</button><Ambience/></nav></header>
+    <button onClick={()=>select(-1)}>Central de operações ↗</button><Ambience/>{me?.admin===1&&<a href="/usuarios">Usuários</a>}{me&&<button onClick={async()=>{const r=await fetch('/api/account/signout',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});if(r.ok)location.assign('/entrar')}}>Sair · {me.name}</button>}</nav></header>
     {assetError&&<p role="alert">Falha ao carregar a arte do escritório. Recarregue a página.</p>}
     <div className={styles.workspace}><div className={styles.viewport}><div className={styles.world} style={{width:`min(100cqw, ${100*width/height}cqh)`,aspectRatio:`${width}/${height}`}}>
     <canvas ref={canvas} tabIndex={0} aria-label="Mapa do escritório. Use setas ou WASD para andar, Enter para interagir ou toque no chão." width={width} height={height}
@@ -296,6 +300,7 @@ export default function Office(){
     </div>)}
     {rooms.map((r,i)=><button key={r.name} className={styles.door} aria-label={'Abrir sala de '+r.name}
       style={{left:(r.signX*32-28)/width*100+'%',top:(r.signY*32+1)/height*100+'%',width:80/width*100+'%',height:14/height*100+'%'}} onClick={()=>select(i)}/>)}
+    {visitors.map(v=><span key={v.id} className={styles.visitor} style={anchor(v.x,v.y-.5)}>{v.name}</span>)}
     <span className={styles.you} style={anchor(avatar.x,avatar.y-.5)}>Você</span>
     <button className={styles.board} style={anchor(12,1.1)} onClick={()=>select(-1)}>
       <b>Central de operações</b>{ready.length>0&&<span className={styles.ready}>{ready.length} {ready.length===1?'vídeo pronto':'vídeos prontos'}</span>}

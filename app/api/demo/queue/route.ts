@@ -1,12 +1,17 @@
+import {requireStudioSession} from '../../../../lib/studioAccount';
 import { NextResponse } from 'next/server';
 
 type DemoJob = { id: string; account: string; status: 'queued' | 'processing' | 'completed'; createdAt: string };
 const jobs: DemoJob[] = [];
 
 /** Demo-only queue endpoint. It never calls Instagram. Replace with BullMQ + Meta Graph API after OAuth/App Review. */
-export async function GET() { return NextResponse.json({ mode: 'demo', jobs }); }
+export async function GET() {
+  const denied=await requireStudioSession();if(denied)return denied;
+ return NextResponse.json({ mode: 'demo', jobs }); }
 
 export async function POST(request: Request) {
+  const denied=await requireStudioSession();if(denied)return denied;
+
   const body = await request.json().catch(() => ({}));
   const accounts: string[] = Array.isArray(body.accounts) ? body.accounts.filter((x: unknown): x is string => typeof x === 'string') : [];
   if (!accounts.length) return NextResponse.json({ error: 'Selecione ao menos uma conta.' }, { status: 400 });

@@ -1,3 +1,4 @@
+import {requireStudioSession} from '../../../../../lib/studioAccount';
 import path from 'node:path';
 import { readFile, stat, rename } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
@@ -18,6 +19,8 @@ async function cover(project: string, id: string) {
 }
 
 export async function GET(request: Request) {
+  const denied=await requireStudioSession();if(denied)return denied;
+
   const id = new URL(request.url).searchParams.get('id') || '';
   const match = /^([a-f0-9]{32})-\d+$/.exec(id);
   if (!match) return new Response(null,{status:400});

@@ -1,3 +1,4 @@
+import {requireStudioSession} from '../../../../lib/studioAccount';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { NextResponse } from 'next/server';
@@ -7,6 +8,8 @@ const maxBytes = 500 * 1024 * 1024;
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
+  const denied=await requireStudioSession();if(denied)return denied;
+
   const form = await request.formData();
   const file = form.get('file');
   const projectId = form.get('projectId');
