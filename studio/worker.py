@@ -161,9 +161,24 @@ def analyze(key):
         enqueue("preview",cid)
     db.commit()
 
-def ass_time_ms(timestamp):
-    hours, minutes, seconds = timestamp.strip().split(":")
-    return (int(hours)*3600 + int(minutes)*60)*1000 + round(float(seconds)*1000)
+def animated_subtitles(path, cues):
+    def stamp(seconds):
+        ticks = round(seconds * 100)
+        return f"{ticks//360000}:{ticks//6000%60:02}:{ticks//100%60:02}.{ticks%100:02}"
+
+    lines = [
+        "[Script Info]", "ScriptType: v4.00+", "PlayResX: 216", "PlayResY: 384",
+        "[V4+ Styles]",
+        "Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding",
+        "Style: Default,Arial,14,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,1,0,2,10,10,22,1",
+        "[Events]", "Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text",
+    ]
+    for start,end,text in cues:
+        # Keep the caption legible even on its first frame.
+        effect = r"{\alpha&H30&\t(0,80,\alpha&H00&)}" if end-start >= .5 else ""
+        literal = text.replace("{","｛").replace("}","｝").replace("\\","＼").replace("\n",r"\N")
+        lines.append(f"Dialogue: 0,{stamp(start)},{stamp(end)},Default,,0,0,0,,{effect}{literal}")
+    path.write_text("\n".join(lines)+"\n", encoding="utf-8")
 
 
 def render(cid, final):
@@ -193,6 +208,7 @@ def render(cid, final):
     from studio.presets import missing_caption_spans, face_region, peaks
     source = ROOT/"media"/row["media"]
     mode = settings.get("captions","generate")
+    cues = []
     blocks = []
     if mode in ("generate","auto"):
         progress(kind,cid,"Detectando legendas no vídeo" if mode=="auto" else "Preparando as legendas")
@@ -202,6 +218,7 @@ def render(cid, final):
                 continue
             spans = missing_caption_spans(source,a,b) if mode=="auto" else [(a,b)]
             for left,right in spans:
+                cues.append((left-row["start"],right-row["start"],seg["text"].strip()))
                 blocks.append(f"{len(blocks)+1}\n{stamp(left-row['start'])} --> {stamp(right-row['start'])}\n{seg['text'].strip()}\n")
     subtitle.write_text("\n".join(blocks))
     burn = bool(blocks)
@@ -221,20 +238,8 @@ def render(cid, final):
             raise ValueError(f"Fonte {font} ausente na VPS. Execute bash studio/install-fonts.sh.")
     if burn and settings.get("animation")=="fade":
         progress(kind,cid,"Preparando a animação das legendas")
-        import re
-        ass = subtitle.with_suffix(".ass")
-        command(["ffmpeg","-loglevel","error","-y","-i",str(subtitle),str(ass)])
-        lines = ass.read_text().splitlines()
-        for i,line in enumerate(lines):
-            if line.startswith("Dialogue:"):
-                fields = line.split(",",9)
-                duration_ms = ass_time_ms(fields[2]) - ass_time_ms(fields[1])
-                if duration_ms >= 500:
-                    fade_ms = min(100, duration_ms // 12)
-                    fields[-1] = r"{\fad(%d,%d)}" % (fade_ms, fade_ms) + fields[-1]
-                lines[i] = ",".join(fields)
-        ass.write_text("\n".join(lines))
-        subtitle = ass
+        subtitle = subtitle.with_suffix(".ass")
+        animated_subtitles(subtitle,cues)
     filters += f"[{layer}]"+(f"subtitles={subtitle}:force_style='FontName={font},Bold=1,FontSize=14,MarginV=22'" if burn else "null")+"[out]"
     progress(kind,cid,"Gerando o vídeo final" if final else "Gerando a prévia")
     command(["ffmpeg","-loglevel","error","-y","-ss",str(row["start"]),"-i",str(ROOT/"media"/row["media"]),"-t",str(row["end"]-row["start"]),"-filter_complex",filters,"-map","[out]","-map","0:a:0?","-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-movflags","+faststart",str(tmp)])
