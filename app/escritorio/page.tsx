@@ -3,6 +3,8 @@ import {useEffect,useRef,useState} from 'react';
 import Link from 'next/link';
 import styles from './office.module.css';
 import map from './map.json';
+import {useOffice} from './useOffice';
+import {ProjectIntake} from '../studio/reaproveitar/ProjectIntake';
 import {Ambience} from './Ambience';
 import {loadScene} from './assets';
 
@@ -29,9 +31,12 @@ function usePatrol(){
   return offset;
 }
 const same=(a:Point,b:Point)=>a.x===b.x && a.y===b.y;
+function OfficeVideo({id,kind}:{id:string;kind:string}){
+  return <video controls playsInline preload="none" aria-label="Reproduzir corte" src={'/api/studio/workflow/video?id='+encodeURIComponent(id)+'&kind='+kind}/>;
+}
 function walkable(p:Point,solid:number[]){
   const tile=map.tiles[p.y]?.[p.x];
-  return tile!==undefined && solid[p.y*map.tiles[0].length+p.x]===0 && !map.rooms.some(room=>same(room,p)||(!room.working&&((p.y===room.y&&Math.abs(p.x-room.x)<=1)||(p.x===room.x&&p.y===room.y+1))));
+  return tile!==undefined && solid[p.y*map.tiles[0].length+p.x]===0 && !map.rooms.some(room=>same(room,p));
 }
 function path(from:Point,to:Point,solid:number[]){
   const queue=[from], parents=new Map<Point,Point>(), seen=new Set([from.x+','+from.y]);
@@ -66,13 +71,35 @@ export default function Office(){
     const animation=reduced?undefined:setInterval(()=>{if(!document.hidden)tick(n=>(n+1)%16)},450);
     return ()=>{clearInterval(clock);clearInterval(animation)};
   },[]);
-  const daysBeforeToday=today?(today.getDay()+6)%7:0;
-  const rooms=map.rooms.map((r,i)=>({...r,done:r.done+(week?map.demoActivity.completedPreviousDays.slice(0,daysBeforeToday).reduce((sum,day)=>sum+day[i],0):0)}));
+  const {data,failed}=useOffice();
+  const start=new Date(today??0);
+  start.setHours(0,0,0,0);
+  if(week)start.setDate(start.getDate()-(start.getDay()+6)%7);
+  const done=data?.finished.filter(at=>at>=start.getTime()/1000).length??0;
+  const pending=data?.queued??0;
+  const rooms=map.rooms.map((r,i)=>{
+    const status=i!==0?'Ainda não configurado':failed?'Sem conexão':data?.status??'Conectando';
+    return {...r,status,working:status==='Trabalhando'};
+  });
   const patrol=usePatrol();
-  const people=rooms.map(r=>({...r,x:r.working?r.seat.x:r.x+patrol.x,y:r.working?r.seat.y:r.y+patrol.y}));
-  const done=rooms.reduce((n,r)=>n+r.done,0);
-  const pending=rooms.reduce((n,r)=>n+r.count,0);
-  const total=done+pending+rooms.filter(r=>r.working).length;
+  const people=rooms.map(r=>({...r,x:r.working?r.seat.x:r.x+(r.status==='Ocioso'?patrol.x:0),y:r.working?r.seat.y:r.y}));
+  const total=done+pending+Number(rooms[0].working);
+  const ready=data?.ready??[];
+  const current=data?.current;
+  const prediction=data?.prediction;
+  const eta=prediction?'≈ '+Math.max(1,Math.ceil(prediction.remaining/60))+' min':'Estimando tempo';
+  const elapsed=current?.started?Math.max(0,Math.floor(Date.now()/1000-current.started)):0;
+  const [newProject,setNewProject]=useState('');
+  function details(index:number){
+    if(index!==0)return <span>Integração de {rooms[index].name.toLowerCase()} ainda não disponível.</span>;
+    return <><span>{rooms[0].status} · {current?.stage||current?.label||'Sem tarefa em execução'}</span>
+      {current&&<><span>{[current.project,current.clip].filter(Boolean).join(' · ')}</span>
+        {current.queuedAt&&current.started&&<span>Tempo em fila · {Math.max(0,current.started-current.queuedAt)} s</span>}
+        <span>Em execução há {Math.floor(elapsed/60)} min {elapsed%60} s</span></>}
+      {rooms[0].working&&<span>Tempo restante · {eta}</span>}
+      {data&&<span>{pending} na fila{data.next?' · A seguir: '+[data.next.label,data.next.project].filter(Boolean).join(' · '):''}</span>}
+      {data?.lastError&&<span>Última falha · {data.lastError.error}</span>}</>;
+  }
   const dialog=useRef<HTMLDialogElement>(null);
   const width=map.tiles[0].length*size,height=map.tiles.length*size;
   useEffect(()=>{if(room!==null){route.current=route.current.slice(0,1);held.current=null;dialog.current?.showModal()}else dialog.current?.close()},[room]);
@@ -137,15 +164,16 @@ export default function Office(){
       ctx.fillStyle='#ffefd4';ctx.fillRect(r.signX*size-28,r.signY*size+1,80,14);
       ctx.fillStyle='#384553';ctx.fillText(r.name,r.signX*size+12,r.signY*size+12);
     });
-  },[avatar,frame,scene,patrol]);
+  },[avatar,frame,scene,patrol,data,failed]);
   const anchor=(x:number,y:number)=>({left:(x+.5)*size/width*100+'%',top:y*size/height*100+'%'});
   return <main className={styles.office} aria-label="Escritório virtual">
     <header className={styles.hud}><Link href="/studio" className={styles.back} aria-label="Voltar ao Studio" title="Voltar ao Studio">←</Link>
-    <div><strong>Escritório virtual</strong><small>{today?.toLocaleDateString('pt-BR',{day:'numeric',month:'short'})} · Demonstração</small></div>
-    <div className={styles.stats}><span><b>{pending}</b> Pendentes</span><span><b>{done}</b> Concluídas</span><span><b>{map.demoActivity.publicationHoursAgo.filter(hours=>hours<72).length}</b> Publicações · 72h</span></div>
-    <div className={styles.overall}><strong>{done} de {total} tarefas concluídas {week?'nesta semana':'hoje'}</strong><progress value={done} max={total}/><small>Sem histórico suficiente para estimar</small></div>
+    <div><strong>Escritório virtual</strong><small>{today?.toLocaleDateString('pt-BR',{day:'numeric',month:'short'})}</small></div>
+    <div className={styles.stats}><span>{data?pending:'—'} na fila</span><span>{data?ready.length:'—'} vídeos prontos</span></div>
+    <div className={styles.overall}><strong>{data?done+' concluídas '+(week?'nesta semana':'hoje'):'Consultando a fila do Studio'}</strong>
+      {total>0&&<progress value={done} max={total}/>}<small>{rooms[0].status}</small></div>
     <label><select aria-label="Período do escritório" value={week?'week':'today'} onChange={e=>setWeek(e.target.value==='week')}><option value="today">Hoje</option><option value="week">Esta semana</option></select></label>
-    <nav aria-label="Progresso por agente">{rooms.map((r,i)=><button key={r.name} onClick={()=>select(i)}><i style={{background:r.color}}/>{r.person} · {r.done}/{r.done+r.count+Number(r.working)}</button>)}
+    <nav aria-label="Progresso por agente">{rooms.map((r,i)=><button key={r.name} onClick={()=>select(i)}><i style={{background:r.color}}/>{r.name}</button>)}
     <button onClick={()=>select(-1)}>Central de operações ↗</button><Ambience/></nav></header>
     {assetError&&<p role="alert">Falha ao carregar a arte do escritório. Recarregue a página.</p>}
     <div className={styles.viewport}><div className={styles.world} style={{width:`min(100cqw, ${100*width/height}cqh)`,aspectRatio:`${width}/${height}`}}>
@@ -172,7 +200,7 @@ export default function Office(){
         const rect=e.currentTarget.getBoundingClientRect();
         const p={x:Math.floor((e.clientX-rect.left)*width/rect.width/size),y:Math.floor((e.clientY-rect.top)*height/rect.height/size)};
         const agent=people.find(r=>same({x:Math.round(r.x),y:Math.round(r.y)},p));
-        e.currentTarget.title=agent?agent.name+' · '+agent.task:same(p,map.computer)?'Computador central':'';
+        e.currentTarget.title=agent?agent.person+' · '+agent.status:same(p,map.computer)?'Computador central':'';
       }}
       onClick={e=>{
         e.currentTarget.focus({preventScroll:true});held.current=null;
@@ -185,19 +213,29 @@ export default function Office(){
       }}/>
     {people.map((r,i)=><div key={r.name}>
       <button className={styles.person} aria-label={r.person+" · "+r.name} style={anchor(r.x,r.y+(r.working?-.8:-.5))} onClick={()=>select(i)}>
-        <span className={styles.tag}><i data-state={r.working?'working':'idle'}/></span>
-        <span className={styles.bubble}>{r.person} · {r.task} · {r.elapsed}<br/>A seguir · {r.next}</span>
+        <span className={styles.tag}><strong>{r.person}</strong>{r.working&&<>
+          <small>Trabalhando · {eta}</small>
+          <progress aria-label="Progresso estimado da tarefa" value={prediction?.percent} max={100}
+            style={{accentColor:!prediction||prediction.percent<35?'#ef6464':prediction.percent<75?'#f5c94f':'#61d58b'}}/>
+        </>}</span>
+        <span className={styles.bubble}><b>{r.person} · {r.name}</b>{details(i)}</span>
       </button>
     </div>)}
+    {rooms.map((r,i)=><button key={r.name} className={styles.door} aria-label={'Abrir sala de '+r.name}
+      style={{left:(r.signX*32-28)/width*100+'%',top:(r.signY*32+1)/height*100+'%',width:80/width*100+'%',height:14/height*100+'%'}} onClick={()=>select(i)}/>)}
     <span className={styles.you} style={anchor(avatar.x,avatar.y-.5)}>Você</span>
     <button className={styles.board} style={anchor(12,1.1)} onClick={()=>select(-1)}>
-      <b>Central de operações</b>
+      <b>Central de operações</b>{ready.length>0&&<span className={styles.ready}>{ready.length} {ready.length===1?'vídeo pronto':'vídeos prontos'}</span>}
 
     </button></div></div>
     <dialog ref={dialog} onClose={()=>select(null)} className={styles.dialog}>
       <button autoFocus onClick={()=>select(null)} aria-label="Fechar detalhes">×</button>
-      <small>Demonstração</small><h2>{room===-1?'Central de operações':map.rooms[room??0]?.name}</h2>
-      {rooms.filter((_,i)=>room===-1||room===i).map(r=><section key={r.name}><h3>{r.person} · {r.name}</h3><p>{r.working?'Trabalhando':'Ocioso'} · {r.task}</p>
-        <p>Tempo decorrido · {r.elapsed}</p><p>A seguir · {r.next}</p><small>{r.done} concluídas · {r.count} pendentes</small></section>)}
+      <h2>{room===-1?'Central de operações':rooms[room??0].name}</h2>
+      {rooms.map((r,i)=>(room===-1||room===i)&&<section key={r.name} className={styles.detail}><h3>{r.person} · {r.name}</h3>{details(i)}</section>)}
+      {room===0&&<details><summary>Enviar vídeo para edição</summary><ProjectIntake onCreated={setNewProject}/></details>}
+      {room===0&&newProject&&<p role="status">Projeto enviado. Acompanhe a fila acima.</p>}
+      {(room===0||room===-1)&&<section><h3>Vídeos prontos {data&&'· '+ready.length}</h3>
+        {!data?<p>{failed?'Não foi possível consultar o Studio.':'Consultando o Studio…'}</p>:ready.length===0?<p>A primeira prévia aparecerá aqui assim que estiver disponível.</p>:ready.map(c=><details key={c.id}><summary>{c.projectTitle} · {c.title}</summary>
+          <OfficeVideo id={c.id} kind={c.kind}/><Link href={{pathname:'/studio',query:{project:c.project}}}>Abrir revisão no Studio</Link></details>)}</section>}
     </dialog></main>
 }

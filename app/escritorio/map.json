@@ -18,16 +18,10 @@
   "rooms": [
     {
       "name": "Edição",
-      "x": 2,
-      "y": 2,
-      "working": true,
-      "task": "Legendando um corte",
+      "x": 4,
+      "y": 3,
       "color": "#9a65cf",
       "person": "Lia",
-      "elapsed": "02:14",
-      "next": "Renderizar prévia",
-      "done": 4,
-      "count": 1,
       "signX": 3,
       "signY": 5,
       "seat": {
@@ -39,14 +33,8 @@
       "name": "Tendências",
       "x": 21,
       "y": 4,
-      "working": false,
-      "task": "Disponível",
       "color": "#409889",
       "person": "Caio",
-      "elapsed": "—",
-      "next": "Sem tarefas",
-      "done": 2,
-      "count": 0,
       "signX": 20,
       "signY": 6,
       "seat": {
@@ -56,16 +44,10 @@
     },
     {
       "name": "Publicações",
-      "x": 4,
-      "y": 10,
-      "working": true,
-      "task": "Preparando uma publicação",
+      "x": 5,
+      "y": 11,
       "color": "#bf745c",
       "person": "Nina",
-      "elapsed": "00:38",
-      "next": "Conferir envio",
-      "done": 3,
-      "count": 1,
       "signX": 4,
       "signY": 8,
       "seat": {
@@ -81,49 +63,5 @@
   "computer": {
     "x": 12,
     "y": 3
-  },
-  "demoActivity": {
-    "completedPreviousDays": [
-      [
-        3,
-        2,
-        1
-      ],
-      [
-        5,
-        1,
-        3
-      ],
-      [
-        2,
-        1,
-        0
-      ],
-      [
-        4,
-        2,
-        2
-      ],
-      [
-        3,
-        2,
-        1
-      ],
-      [
-        2,
-        3,
-        1
-      ]
-    ],
-    "publicationHoursAgo": [
-      2,
-      6,
-      18,
-      27,
-      34,
-      48,
-      69,
-      82
-    ]
   }
 }

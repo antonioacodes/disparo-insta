@@ -16,7 +16,7 @@ export async function GET(request:Request) {
     try {return NextResponse.json(JSON.parse(await worker(['history',project])));}
     catch {return NextResponse.json({error:'Falha ao carregar o histórico.'},{status:503});}
   }
-  try { return NextResponse.json(JSON.parse(await worker(['list']))); }
+  try { return NextResponse.json(JSON.parse(await worker([new URL(request.url).searchParams.has('office')?'office':'list']))); }
   catch { return NextResponse.json({error:'Falha ao consultar a fila do Studio.'},{status:503}); }
 }
 

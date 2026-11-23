@@ -362,3 +362,13 @@ Cada etapa exige commit próprio e aprovação antes da seguinte.
 A HUD da demonstração compartilha as contagens com a Central. Hoje e Esta semana incluem fila, execução e conclusões. Publicações usa sempre a janela de 72 horas. Os exemplos ficam em map.json. A estimativa aguarda histórico real na integração de backend. O cenário usa mobiliário em pixel art próprio e respeita a preferência de movimento reduzido.
 
 A versão visual aprovada usa Office Pixel Art Free da Imersa Studios (ver CREDITS.md). O navegador lê o mapa Tiled public/office/office.tmj e os quatro atlas PNG. O tile mede 32 px e a altura visual de referência do personagem em pé é 48 px antes do zoom inteiro de 2× a 4×. A área de colisão acompanha os pés do personagem.
+
+### Etapa 2 — sala de Edição e fila real
+
+A sala Edição compartilha o formulário de criação e os serviços de upload, importação e geração de cortes do Studio. O resultado abre no próprio escritório. O link de revisão leva ao projeto no Studio. A Central sinaliza prévias disponíveis para revisão e exportações finalizadas cujo arquivo existe.
+
+Para rodar localmente, inicie o site com `npm run dev` e, em outro terminal na raiz do mesmo projeto, ative o ambiente Python do Studio e execute `python -m studio.worker work`. Abra `/escritorio`. Site e worker precisam compartilhar o diretório storage. A atualização desta etapa é por consulta a cada cinco segundos. O worker registra atividade a cada dez segundos. O escritório considera o worker disponível quando o processo detém o bloqueio e o sinal tem menos de 45 segundos.
+
+O progresso sobre Lia é uma estimativa da tarefa em execução. O cálculo usa a mediana dos últimos vinte trabalhos concluídos do mesmo tipo, ajustada pela duração da mídia quando disponível. Para a primeira análise ou renderização, usa a duração do vídeo ou corte. Durante uma importação sem referência de tempo, a barra indica atividade até haver uma estimativa. A avaliação de público e os jobs de vídeo compartilham um bloqueio exclusivo de CPU na VPS.
+
+Tendências e Publicações aguardam as respectivas integrações. O painel histórico detalhado e a transmissão de eventos ficam para a Etapa 3. A proteção de produção por proxy ou sessão ainda requer confirmação antes de habilitar publicação ou reprocessamento pelo escritório. Esta etapa utiliza as configurações existentes do Studio e dispensa novas chaves.
