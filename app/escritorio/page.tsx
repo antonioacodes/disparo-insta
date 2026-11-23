@@ -7,6 +7,7 @@ import {useOffice} from './useOffice';
 import {ProjectIntake} from '../studio/reaproveitar/ProjectIntake';
 import {Department,ActionCard,StatusIcon} from './Department';
 import {Audience} from '../studio/Audience';
+import {Trends} from './Trends';
 import {Ambience} from './Ambience';
 import {loadScene} from './assets';
 
@@ -62,7 +63,7 @@ export default function Office(){
   const done=data?.finished.filter(at=>at>=start.getTime()/1000).length??0;
   const pending=data?.queued??0;
   const rooms=map.rooms.map((r,i)=>{
-    const status=i!==0?'Ainda não configurado':failed?'Sem conexão':data?.status??'Conectando';
+    const status=i===1?(failed?'Sem conexão':data?.trendStatus??'Conectando'):i!==0?'Ainda não configurado':failed?'Sem conexão':data?.status??'Conectando';
     return {...r,status,working:status==='Trabalhando'};
   });
   const people=rooms.map(r=>{
@@ -78,6 +79,7 @@ export default function Office(){
   const [view,setView]=useState<'home'|'edit'|'ready'|'info'>('home');
   const [newProject,setNewProject]=useState('');
   function details(index:number){
+    if(index===1)return <span>{data?.trendTask?[data.trendTask.query,data.trendTask.state].join(' · '):rooms[1].status}</span>;
     if(index!==0)return <span>Integração de {rooms[index].name.toLowerCase()} ainda não disponível.</span>;
     return <><span>{rooms[0].status} · {current?.stage||current?.label||'Sem tarefa em execução'}</span>
       {current&&<><span>{[current.project,current.clip].filter(Boolean).join(' · ')}</span>
@@ -199,7 +201,7 @@ export default function Office(){
       }}/>
     {people.map((r,i)=><div key={r.name}>
       <button className={styles.person} aria-label={r.person+" · "+r.name} style={anchor(r.x,r.y+(r.seated?-.8:-.5))} onClick={()=>select(i)}>
-        <span className={styles.tag}><strong title={r.status}><StatusIcon status={r.status}/>{r.person}</strong>{r.working&&<>
+        <span className={styles.tag}><strong title={r.status}><StatusIcon status={r.status}/>{r.person}</strong>{r.working&&i===1&&<small>{data?.trendTask?.state}</small>}{r.working&&i===0&&<>
           <small>Trabalhando · {eta}</small>
           <progress aria-label="Progresso estimado da tarefa" value={prediction?.percent} max={100}
             style={{accentColor:!prediction||prediction.percent<35?'#ef6464':prediction.percent<75?'#f5c94f':'#61d58b'}}/>
@@ -218,7 +220,8 @@ export default function Office(){
       <button autoFocus onClick={()=>select(null)} aria-label="Fechar detalhes">×</button>
       {room===-1&&<><h2>Central de operações</h2>{rooms.map((r,i)=><section key={r.name} className={styles.detail}><h3>{r.person} · {r.name}</h3>{details(i)}</section>)}</>}
       {room!==null&&room>=0&&<Department {...rooms[room]} onBack={view==='home'?undefined:()=>setView('home')}>
-        {view==='home'&&<>
+        {room===1&&<Trends/>}
+        {room!==1&&view==='home'&&<>
           {room===0&&<p>{current?.stage||current?.label||(data?'Sem tarefa em execução':'Consultando a fila…')}{data&&' · '+pending+' na fila'}</p>}
           <div className={styles.actions}>{room===0?<>
             <ActionCard title="Edição" caption="Criar um projeto" onClick={()=>{setNewProject('');setView('edit')}}/>

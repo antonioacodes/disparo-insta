@@ -14,6 +14,7 @@ import urllib.request
 from pathlib import Path
 
 from studio.delete_project import delete_project
+from studio import trends
 from studio.background import EditingPending, run_background
 from studio.cache import maintain, remove_preview, RETENTION
 
@@ -460,6 +461,7 @@ def worker():
                       WHERE kind IN ('preview','final') AND state='failed'
                       AND error=?""", ("module 'cv2' has no attribute 'CascadeClassifier'",))
         import threading
+        threading.Thread(target=trends.loop,args=(WORK,),daemon=True).start()
         threading.Thread(target=heartbeat,daemon=True).start()
         threading.Thread(target=maintain,args=(WORK,),daemon=True).start()
         threading.Thread(target=audience_loop,daemon=True).start()
@@ -504,16 +506,31 @@ def worker():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=["work","office","score-audience","create","list","approve","reject","revise","captions","audience","delete-project","import","history"])
+    parser.add_argument("action", choices=["trend-step","trend-submit","trend-list","work","office","score-audience","create","list","approve","reject","revise","captions","audience","delete-project","import","history"])
     parser.add_argument("args", nargs="*")
     opts = parser.parse_args()
-    if opts.action == "office":
+    trends.init(db)
+    if opts.action == "trend-step":
+        trends.process(db,int(opts.args[0]))
+    elif opts.action == "trend-submit":
+        try:
+            print(json.dumps({"id":trends.submit(db,*opts.args)}))
+        except ValueError as exc:
+            print(json.dumps({"error":str(exc)}))
+    elif opts.action == "trend-list":
+        cfg=trends.settings()
+        print(json.dumps(dict(reports=trends.recent(db),sources=trends.sources(cfg),model=bool(cfg["STUDIO_TRENDS_MODEL"]))))
+    elif opts.action == "office":
         from studio.office import snapshot
         beat = WORK/"worker.beat"
         online = audience_status() != "offline" and beat.exists() and time.time()-beat.stat().st_mtime < 45
         db.execute("BEGIN")
         result = snapshot(db, WORK, online)
         result["audienceStatus"] = audience_status() if online else "offline"
+        active=db.execute("SELECT query,state FROM trend_reports WHERE state NOT IN ('Concluída','Erro') ORDER BY id LIMIT 1").fetchone()
+        cfg=trends.settings()
+        result['trendStatus']=('Processador offline' if not online else ('Esperando' if active['state'] in ('Esperando','Na fila') else 'Trabalhando') if active else 'Ocioso' if cfg['STUDIO_TRENDS_MODEL'] and any(trends.sources(cfg).values()) else 'Ainda não configurado')
+        result['trendTask']=dict(active) if active else None
         print(json.dumps(result))
     elif opts.action == "history":
         project_id, = opts.args

@@ -57,3 +57,10 @@
 .statusIcon[data-state=waiting]{background:#d7a541}.statusIcon[data-state=error]{background:#d65b55}
 .dialog form progress{width:100%;height:5px;accent-color:#46877a;display:block;margin:4px 0 14px}
 .dialog .actions button:focus-visible,.dialog .actions button:hover{outline:2px solid #478376;outline-offset:1px}
+
+.trends form,.trends label,.trends article li {display:grid;gap:.45rem}
+.trends form {gap:.9rem}
+.trends input,.trends select {font:inherit;padding:.65rem;border:1px solid #8796a0;border-radius:.5rem}
+.trends button {margin:.2rem}
+.trends article li {padding:.6rem 0}
+.trends article small {opacity:.8}

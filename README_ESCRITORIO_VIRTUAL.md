@@ -386,3 +386,9 @@ python3 -m studio.benchmark_trends qwen2.5:0.5b qwen2.5:1.5b
 ```
 
 O ensaio usa CPU, uma thread e o mesmo exemplo de tendência para ambos. Ele mede tempo total, tempo de geração, CPU média (100% representa um núcleo) e pico de memória RSS dos processos Ollama, amostrado a cada 250 ms. Rode sem outras requisições ao Ollama. A resposta também é registrada para revisão. O exemplo verifica se o modelo distingue variação observada de um único ponto de dados. A escolha do modelo e o agendamento aguardam as medições da VPS.
+
+### Pesquisas no departamento de Tendências
+
+No escritório, clique em Caio e em **Pesquisar tendências**. O YouTube pesquisa vídeos publicados no período e disponíveis na região selecionada. A Twitch pesquisa canais ao vivo no momento da consulta. Os links e nomes vêm das APIs oficiais. Os resultados ficam visíveis enquanto o modelo local prepara a análise.
+
+Na raiz do Studio, configure no arquivo .env ou no ambiente do serviço YOUTUBE_API_KEY (YouTube Data API v3), TWITCH_CLIENT_ID e TWITCH_CLIENT_SECRET (aplicativo Twitch Helix), conforme as fontes desejadas. Configure STUDIO_TRENDS_MODEL com o identificador instalado no Ollama local depois da medição. O worker usa o serviço em 127.0.0.1:11434 com uma thread de CPU. Inicie o worker normal do Studio. Consultas iguais reutilizam o resultado do YouTube por 24 horas e o de lives por 15 minutos. Os relatórios expiram em 30 dias. Edições têm prioridade e a análise retoma a partir dos dados já coletados.
