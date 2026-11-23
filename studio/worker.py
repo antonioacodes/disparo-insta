@@ -1,4 +1,5 @@
 """Persistent studio worker. Run from the project root with python3 -m studio.worker."""
+import re
 import argparse
 import json
 import os
@@ -71,7 +72,9 @@ def command(args):
 
 def project(media, title, preset='{}', remote=False):
     settings = json.loads(preset)
-    allowed = {'motion':['off','visual','sound'],'format':['vertical','horizontal'],'captions':['generate','preserve','auto','off'],'facecam':['off','always','peaks'],'font':["DejaVu Sans","Montserrat","Anton","Bebas Neue","Oswald","Poppins","Roboto Condensed","Barlow Condensed","Archivo Black","DM Sans","Space Grotesk","DejaVu Serif","Liberation Mono"],'animation':['off','fade']}
+    allowed = {'motion':['off','visual','sound'],'format':['vertical','horizontal'],'captions':['generate','preserve','auto','off'],'facecam':['off','always','peaks'],'font':["DejaVu Sans","Montserrat","Anton","Bebas Neue","Oswald","Poppins","Roboto Condensed","Barlow Condensed","Archivo Black","DM Sans","Space Grotesk","DejaVu Serif","Liberation Mono"],'animation':['off','fade','karaoke']}
+    if isinstance(settings, dict) and isinstance(settings.get('highlight'), str) and re.fullmatch(r'#[0-9a-fA-F]{6}', settings['highlight']):
+        allowed['highlight'] = [settings['highlight']]
     if isinstance(settings, dict) and 'clipCount' in settings:
         count = settings['clipCount']
         if count != 'max' and not (isinstance(count, str) and count.isascii() and count.isdigit() and int(count) > 0):
@@ -180,7 +183,7 @@ def analyze(key):
         enqueue("preview",cid)
     db.commit()
 
-def animated_subtitles(path, cues, horizontal=False):
+def animated_subtitles(path, cues, horizontal=False, karaoke=False):
     def stamp(seconds):
         ticks = round(seconds * 100)
         return f"{ticks//360000}:{ticks//6000%60:02}:{ticks//100%60:02}.{ticks%100:02}"
@@ -194,8 +197,10 @@ def animated_subtitles(path, cues, horizontal=False):
     ]
     for start,end,text in cues:
         # Keep the caption legible even on its first frame.
-        effect = r"{\alpha&H30&\t(0,80,\alpha&H00&)}" if end-start >= .5 else ""
+        effect = r"{\alpha&H30&\t(0,80,\alpha&H00&)}" if not karaoke and end-start >= .5 else ""
         literal = text.replace("{","｛").replace("}","｝").replace("\\","＼").replace("\n",r"\N")
+        if karaoke:
+            literal = text  # Already escaped by karaoke_events.
         lines.append(f"Dialogue: 0,{stamp(start)},{stamp(end)},Default,,0,0,0,,{effect}{literal}")
     path.write_text("\n".join(lines)+"\n", encoding="utf-8")
 
@@ -234,13 +239,18 @@ def render(cid, final):
     blocks = []
     if mode in ("generate","auto"):
         progress(kind,cid,"Detectando legendas no vídeo" if mode=="auto" else "Preparando as legendas")
-        for seg in captions(cid):
+        karaoke = settings.get("animation") == "karaoke"
+        for seg in captions(cid, with_words=karaoke):
             a,b = max(row["start"],seg["start"]),min(row["end"],seg["end"])
             if b<=a:
                 continue
             spans = missing_caption_spans(source,a,b,horizontal) if mode=="auto" else [(a,b)]
             for left,right in spans:
-                cues.append((left-row["start"],right-row["start"],seg["text"].strip()))
+                if karaoke:
+                    from studio.karaoke import karaoke_events
+                    cues.extend(karaoke_events(seg,left,right,row["start"],settings.get("highlight","#FFD700")))
+                else:
+                    cues.append((left-row["start"],right-row["start"],seg["text"].strip()))
                 blocks.append(f"{len(blocks)+1}\n{stamp(left-row['start'])} --> {stamp(right-row['start'])}\n{seg['text'].strip()}\n")
     subtitle.write_text("\n".join(blocks))
     burn = bool(blocks)
@@ -265,10 +275,10 @@ def render(cid, final):
         family = command(["fc-match","-f","%{family}",font]).strip()
         if font.casefold() not in [name.strip().casefold() for name in family.split(",")]:
             raise ValueError(f"Fonte {font} ausente na VPS. Execute bash studio/install-fonts.sh.")
-    if burn and settings.get("animation")=="fade":
+    if burn and settings.get("animation") in ("fade","karaoke"):
         progress(kind,cid,"Preparando a animação das legendas")
         subtitle = subtitle.with_suffix(".ass")
-        animated_subtitles(subtitle,cues,horizontal)
+        animated_subtitles(subtitle,cues,horizontal,karaoke)
     filters += f"[{layer}]"+(f"subtitles={subtitle}:force_style='FontName={font},Bold=1,FontSize=14,MarginV=22'" if burn else "null")+"[out]"
     progress(kind,cid,"Gerando o vídeo final" if final else "Gerando a prévia")
     command(["ffmpeg","-loglevel","error","-y","-ss",str(row["start"]),"-i",str(ROOT/"media"/row["media"]),"-t",str(row["end"]-row["start"]),"-filter_complex",filters,"-map","[out]","-map",audio_map,"-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-movflags","+faststart",str(tmp)])
@@ -293,10 +303,10 @@ def review(cid, approve, delete_preview=False):
         db.execute("UPDATE preview_cache SET removed=1 WHERE clip=?", (cid,))
     db.commit()
 
-def captions(cid,connection=db):
+def captions(cid,connection=db,with_words=False):
     row = connection.execute("SELECT c.start,c.end,p.transcript FROM clips c JOIN projects p ON p.id=c.project WHERE c.id=?", (cid,)).fetchone()
     edits = dict(connection.execute("SELECT segment,text FROM caption_edits WHERE clip=?", (cid,)))
-    return [dict(id=i,start=s["start"],end=s["end"],text=edits.get(i,s["text"])) for i,s in enumerate(json.loads(Path(row["transcript"]).read_text())["segments"]) if s["end"]>row["start"] and s["start"]<row["end"]]
+    return [dict(**({"words":s.get("words",[])} if with_words else {}),id=i,start=s["start"],end=s["end"],text=edits.get(i,s["text"])) for i,s in enumerate(json.loads(Path(row["transcript"]).read_text())["segments"]) if s["end"]>row["start"] and s["start"]<row["end"]]
 
 def revise(cid, title, start, end, corrections="{}"):
     start, end = float(start), float(end)

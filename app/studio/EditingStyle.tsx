@@ -1,7 +1,7 @@
 'use client';
 import {Info, Scissors} from 'lucide-react';
 import {useState} from 'react';
-export const defaults={motion:'off',clipCount:'10',format:'vertical',captions:'generate',facecam:'off',font:'DejaVu Sans',animation:'off'};
+export const defaults={highlight:'#FFD700',motion:'off',clipCount:'10',format:'vertical',captions:'generate',facecam:'off',font:'DejaVu Sans',animation:'off'};
 export function EditingStyle({value,onChange}:{value:typeof defaults;onChange:(v:typeof defaults)=>void}){
   const [expanded,expand]=useState(false);
   const notes:Record<string, Record<string,string>>={
@@ -24,6 +24,7 @@ export function EditingStyle({value,onChange}:{value:typeof defaults;onChange:(v
     },
     animation:{
       off:'Cada legenda gerada aparece e desaparece de uma vez, no tempo da fala.',
+      karaoke:'A palavra falada cresce e ganha a cor escolhida enquanto as outras continuam visíveis.',
       fade:'Cada legenda gerada ganha uma breve transição de opacidade na entrada e na saída. Legendas embutidas na imagem mantêm o movimento original.'
     }
   };
@@ -32,9 +33,14 @@ export function EditingStyle({value,onChange}:{value:typeof defaults;onChange:(v
     ['captions','Legendas',[['generate','Gerar legendas'],['preserve','Preservar originais'],['auto','Detectar no vídeo'],['off','Desativado']]],
     ['facecam','Facecam',[['off','Desativada'],['always','Corte inteiro'],['peaks','Picos de volume']]],
     ['motion','Ritmo da edição',[['off','Original'],['visual','Ênfase visual'],['sound','Ênfase visual + som']]],
-    ['animation','Animação de texto',[['off','Estática'],['fade','Entrada suave']]]
+    ['animation','Animação de texto',[['off','Estática'],['fade','Entrada suave'],['karaoke','Karaokê']]]
   ] as const;
-  return <section className="editStyle"><h2>Estilo do projeto</h2>{choices.map(([key,label,items])=><fieldset key={key}><legend>{label}</legend><div className="choiceRow">{items.map(([id,name])=><button type="button" aria-pressed={value[key]===id} key={id} onClick={()=>onChange({...value,[key]:id})}>{name}</button>)}</div><div className="styleNote" role="status"><Info size={17} aria-hidden="true"/><span>{notes[key][value[key]]}</span></div></fieldset>)}
+  return <section className="editStyle"><h2>Estilo do projeto</h2>{choices.filter(([key])=>key!=='animation'||['generate','auto'].includes(value.captions)).map(([key,label,items])=><fieldset key={key}><legend>{label}</legend><div className="choiceRow">{items.map(([id,name])=><button type="button" aria-pressed={value[key]===id} key={id} onClick={()=>onChange({...value,[key]:id})}>{name}</button>)}</div><div className="styleNote" role="status"><Info size={17} aria-hidden="true"/><span>{notes[key][value[key]]}</span></div></fieldset>)}
+  {value.animation==='karaoke' && ['generate','auto'].includes(value.captions) && <fieldset>
+    <legend>Cor de destaque da palavra</legend>
+    <label className="studioTextInput"><input type="color" aria-label="Cor de destaque" style={{width:48,height:36}} value={value.highlight} onChange={e=>onChange({...value,highlight:e.target.value})}/>{value.highlight.toUpperCase()}</label>
+    <div className="captionSample" style={{fontFamily:value.font}}><span>A palavra <strong style={{color:value.highlight,fontSize:'115%'}}>falada</strong> ganha destaque.</span></div>
+  </fieldset>}
   <fieldset><legend>Quantidade de cortes</legend>
     <div className="choiceRow">
       <button type="button" aria-pressed={value.clipCount!=='max'} onClick={()=>onChange({...value,clipCount:value.clipCount==='max'?'10':value.clipCount})}>Escolher quantidade</button>
