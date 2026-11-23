@@ -1,0 +1,23 @@
+{
+  "tiles": [
+    "ggTggggggggggggggggTg",
+    "g###################g",
+    "g#.....#.....#.....#g",
+    "g#.D...#..D..#..D..#g",
+    "g#.....#.....#.....#g",
+    "g#.....#.....#.....#g",
+    "g###.#####.#####.###g",
+    "g#.................#g",
+    "g#.......C.........#g",
+    "g#########.#########g",
+    "ggTggggggg.ggggggTggg",
+    "gggggggggg.gggggggggg"
+  ],
+  "rooms": [
+    {"name":"Edição","x":3,"y":4,"working":true,"task":"Legendando um corte","color":"#9a65cf"},
+    {"name":"Tendências","x":11,"y":5,"working":false,"task":"Disponível","color":"#409889"},
+    {"name":"Publicações","x":16,"y":4,"working":true,"task":"Preparando uma publicação","color":"#bf745c"}
+  ],
+  "spawn":{"x":10,"y":10},
+  "computer":{"x":9,"y":8}
+}
