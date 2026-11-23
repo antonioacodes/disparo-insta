@@ -1,4 +1,4 @@
-export type Verdict={motor?:string;geral:number; dimensoes:Record<string,number>; resumo:string; sugestao:string; personas:{perfil:string;motivo:string}[]; erro?:string;retryAt?:number};
+export type Verdict={motor?:string;geral:number; dimensoes:Record<string,number>; resumo:string; sugestao:string; personas:{perfil:string;motivo:string;notas?:Record<string,number>}[]; erro?:string;retryAt?:number};
 const guide='https://github.com/antonioacodes/disparo-insta/blob/feat/painel-fila-meta/docs/teste-tinytroupe.md';
 export function Audience({v,status,clip,removed}:{v?:Verdict;status?:string;clip:{state:string};removed:boolean}){
   if(!v || v.erro){

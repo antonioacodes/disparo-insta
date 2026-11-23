@@ -1,4 +1,5 @@
 'use client';
+import {ActivityInbox} from './ActivityInbox';
 import {BiaProgress} from './BiaProgress';
 import {useEffect,useRef,useState} from 'react';
 import Link from 'next/link';
@@ -312,19 +313,14 @@ export default function Office(){
           {i===3&&bia&&<BiaProgress task={bia}/>}
           {i===1&&data?.trendTask&&<p>{data.trendTask.query} · {data.trendTask.progress?.label||data.trendTask.state}</p>}
         </div>)}
-        <h3>Últimas conclusões</h3>
-        {data?.activity?.filter(item=>item.at>=start.getTime()/1000).map(item=><article key={item.agent+item.id}>
-          <small>{item.agent} · <time>{new Date(item.at*1000).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</time></small>
-          <strong>{item.label}</strong>{item.title&&<p>{item.title}</p>}
-        </article>)}
-        {!data?.activity?.some(item=>item.at>=start.getTime()/1000)&&<p>{data?'Nenhuma conclusão registrada neste período.':'Consultando o histórico…'}</p>}
+        <ActivityInbox data={data}/>
       </div>
     </aside></div>
     <dialog ref={dialog} onClose={()=>{select(null);setView('home');setNewProject('')}} className={[styles.dialog,room===0?styles.editDepartment:''].join(' ')}>
       <button autoFocus onClick={()=>select(null)} aria-label="Fechar detalhes">×</button>
       {room===-1&&<><h2>Central de operações</h2>{rooms.map((r,i)=><section key={r.name} className={styles.detail}><h3>{r.person} · {r.name}</h3>{details(i)}</section>)}</>}
       {room!==null&&room>=0&&<Department {...rooms[room]} onBack={view==='home'?undefined:()=>setView('home')}>
-        {room===1&&<Trends/>}{room===3&&<>{bia&&<div className={styles.editActivity}><BiaProgress task={bia}/></div>}<Roteiros/></>}{room===2&&<Roteiros publicacoes/>}
+        {room===1&&<Trends/>}{room===3&&<>{bia&&<div className={styles.editActivity}><BiaProgress task={bia}/></div>}<Roteiros/></>}{room===2&&<><Roteiros publicacoes/>{ready.filter(c=>c.kind==='final').map(c=><article key={c.id}><h3>{c.title}</h3><small>Pronto para publicar · {c.projectTitle}</small><OfficeVideo id={c.id} kind="final"/></article>)}</>}
         {room!==1&&room!==3&&view==='home'&&<>
           {room===0&&<div className={styles.editActivity}><strong>{current?.stage||current?.label||(data?'Sem tarefa em execução':'Consultando a fila…')}</strong><small>{data?pending+' na fila':'Consultando o Studio'}{rooms[0].working?' · '+eta:''}</small>{rooms[0].working&&<progress aria-label="Progresso estimado da edição" value={prediction?.percent} max={100}/>}</div>}
           <div className={styles.actions}>{room===0?<>

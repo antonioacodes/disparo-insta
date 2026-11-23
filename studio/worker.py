@@ -14,7 +14,7 @@ import urllib.request
 from pathlib import Path
 
 from studio.delete_project import delete_project
-from studio import trends, roteiros, producao
+from studio import trends, roteiros, producao, activity_review
 from studio.model_slot import model_slot
 from studio.background import EditingPending, run_background
 from studio.cache import maintain, remove_preview, RETENTION
@@ -94,7 +94,9 @@ def project(media, title, preset='{}', remote=False):
     source = ROOT / "media" / media
     if not remote and (Path(media).name != media or not source.is_file() or source.is_symlink()):
         raise ValueError("Arquivo de origem inválido")
-    db.execute("BEGIN IMMEDIATE")
+    own_transaction = not db.in_transaction
+    if own_transaction:
+        db.execute("BEGIN IMMEDIATE")
     if not remote and not source.is_file():
         db.rollback()
         raise ValueError("Original excluído")
@@ -103,7 +105,8 @@ def project(media, title, preset='{}', remote=False):
     if remote:
         db.execute("INSERT INTO link_sources VALUES(?,?)",(key,url))
     enqueue("import" if remote else "analyze", key)
-    db.commit()
+    if own_transaction:
+        db.commit()
     return key
 
 def candidates(segments):
@@ -339,13 +342,18 @@ def cpu_slot():
         yield
 
 
+def audience_model():
+    return (os.getenv("STUDIO_AUDIENCE_MODEL") or os.getenv("STUDIO_EDITOR_MODEL")
+            or trends.settings()["STUDIO_TRENDS_MODEL"])
+
+
 def score_audience(cid, output):
     row = db.execute("SELECT * FROM clips WHERE id=?", (cid,)).fetchone()
     if row is None:
         raise ValueError("Corte indisponível")
     conn = db
     tiny = os.getenv("STUDIO_AUDIENCE_PROVIDER") == "tinytroupe"
-    model = os.getenv("STUDIO_AUDIENCE_MODEL") or os.getenv("STUDIO_EDITOR_MODEL")
+    model = audience_model()
     profiles = ["Fã do criador", "Espectador casual", "Usuário de Reels", "Crítico exigente", "Especialista do nicho"]
     dimensions = ["Gancho", "Engajamento", "Clareza", "Ritmo"]
     segments = captions(row["id"],conn)
@@ -364,9 +372,17 @@ def score_audience(cid, output):
                   "Considere especialmente os primeiros 3 segundos. Avalie somente conteúdo e ritmo da transcrição. "
                   "Responda JSON com resumo, sugestao e personas, uma por perfil em ordem. Cada persona contém motivo e notas (objeto com todas as dimensões, inteiros de 0 a 100). "
                   +json.dumps([profiles,dimensions,inputs],ensure_ascii=False))
-        payload = json.dumps({"model":model,"keep_alive":0,"stream":False,"format":"json","prompt":prompt}).encode()
+        score_schema={"type":"object","properties":{k:{"type":"integer","minimum":0,"maximum":100} for k in dimensions},
+                      "required":dimensions}
+        person_schema={"type":"object","properties":{"motivo":{"type":"string"},"notas":score_schema},
+                       "required":["motivo","notas"]}
+        schema={"type":"object","properties":{"resumo":{"type":"string"},"sugestao":{"type":"string"},
+                "personas":{"type":"array","items":person_schema,"minItems":5,"maxItems":5}},
+                "required":["resumo","sugestao","personas"]}
+        payload = json.dumps({"model":model,"keep_alive":0,"stream":False,"format":schema,"prompt":prompt,
+                              "options":{"num_gpu":0,"num_thread":1,"temperature":0}}).encode()
         req = urllib.request.Request("http://127.0.0.1:11434/api/generate",data=payload,headers={"Content-Type":"application/json"})
-        with urllib.request.urlopen(req,timeout=240) as response:
+        with urllib.request.urlopen(req,timeout=1200) as response:
             verdict = json.loads(json.load(response)["response"])
         people = verdict["personas"]
         if len(people)!=len(profiles) or not all(isinstance(verdict[k],str) for k in ("resumo","sugestao")):
@@ -384,7 +400,7 @@ def score_audience(cid, output):
 def audience_loop(clip_id=None):
     conn=sqlite3.connect(WORK / 'studio.sqlite',isolation_level=None,timeout=20)
     conn.row_factory=sqlite3.Row
-    model = os.getenv("STUDIO_AUDIENCE_MODEL") or os.getenv("STUDIO_EDITOR_MODEL")
+    model = audience_model()
     tiny = os.getenv("STUDIO_AUDIENCE_PROVIDER") == "tinytroupe"
     if tiny:
         model = "tinytroupe"
@@ -474,7 +490,7 @@ def worker():
         provider = "disabled"
         if os.getenv("STUDIO_AUDIENCE_PROVIDER") == "tinytroupe":
             provider = "TinyTroupe"
-        elif os.getenv("STUDIO_AUDIENCE_MODEL") or os.getenv("STUDIO_EDITOR_MODEL"):
+        elif audience_model():
             provider = "Ollama"
         lock.truncate(0)
         lock.write(provider)
@@ -502,6 +518,8 @@ def worker():
                         etapa=job["entity"].split(":")[1]
                         progress(job["kind"],job["entity"],etapa.capitalize())
                         run_script_stage(job,etapa)
+                    elif job["kind"] == "trend-select":
+                        activity_review.select_with_ai(db,WORK,project,job["entity"])
                     elif job["kind"] == "purge":
                         delete_project(db, WORK, job["entity"])
                     elif job["kind"] == "import":
@@ -529,6 +547,9 @@ def worker():
                     db.execute("UPDATE jobs SET state='done' WHERE id=?", (job["id"],))
                 except Exception as exc:
                     db.rollback()
+                    if job['kind']=='trend-select':
+                        db.execute("DELETE FROM activity_decisions WHERE kind='trend' AND entity=?",(job['entity'],))
+                        db.execute('DELETE FROM trend_handoff WHERE report=?',(job['entity'],))
                     if job['kind']=='producao':
                         db.execute("UPDATE producoes_video SET etapa='erro',erro=? WHERE id=?",(str(exc)[:500],job['entity'].split(':')[0]))
                     if job['kind'] in ('roteiro','producao'):
@@ -537,13 +558,21 @@ def worker():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=["roteiros","trend-manage","trend-step","trend-submit","trend-list","work","office","score-audience","create","list","approve","reject","revise","captions","audience","delete-project","import","history"])
+    parser.add_argument("action", choices=["activity-review","roteiros","trend-manage","trend-step","trend-submit","trend-list","work","office","score-audience","create","list","approve","reject","revise","captions","audience","delete-project","import","history"])
     parser.add_argument("args", nargs="*")
     opts = parser.parse_args()
     trends.init(db)
     roteiros.init(db)
     producao.init(db)
-    if opts.action == "roteiros":
+    activity_review.init(db)
+    if opts.action == "activity-review":
+        try:
+            kind,entity,decision,raw=opts.args
+            activity_review.decide(db,WORK,project,kind,entity,decision=="approve",json.loads(raw))
+            print(json.dumps({"ok":True}))
+        except (ValueError,KeyError,TypeError) as exc:
+            print(json.dumps({"error":str(exc)}))
+    elif opts.action == "roteiros":
         try:
             print(json.dumps(roteiros.command(db,opts.args[0],opts.args[1],json.loads(opts.args[2]) if len(opts.args)>2 else {})))
         except (ValueError,KeyError,TypeError) as exc:
@@ -566,6 +595,8 @@ if __name__ == "__main__":
         online = audience_status() != "offline" and beat.exists() and time.time()-beat.stat().st_mtime < 45
         db.execute("BEGIN")
         result = snapshot(db, WORK, online)
+        result["inbox"]=activity_review.pending(db,result["ready"])
+        result["decisions"]=[dict(r) for r in db.execute("SELECT * FROM activity_decisions ORDER BY at DESC LIMIT 40")]
         result["scripts"]=roteiros.overview(db)
         result["audienceStatus"] = audience_status() if online else "offline"
         active=db.execute("SELECT * FROM trend_reports WHERE state NOT IN ('Concluída','Erro','Interrompida') ORDER BY id LIMIT 1").fetchone()
