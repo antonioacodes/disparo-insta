@@ -78,9 +78,9 @@ export default function Office(){
     const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let last=performance.now();
     const clock=setInterval(()=>{
-      const now=performance.now(),advance=Math.min(now-last,100)*.002;
+      const now=performance.now(),advance=Math.min(now-last,100)*(reduced?.001:.002);
       last=now;
-      if(document.hidden||reduced)return;
+      if(document.hidden)return;
       let changed=false;
       for(let i=0;i<actors.length;i++){
         const a=actors[i];
@@ -103,7 +103,7 @@ export default function Office(){
         a.stride+=step;a.moving=true;
         if(step===length){a.x=target.x;a.y=target.y;a.steps.shift()}
         else{a.x+=dx*step/length;a.y+=dy*step/length}
-        if(!a.steps.length){a.moving=false;a.rest=now+1600+Math.random()*2000}
+        if(!a.steps.length){a.moving=false;a.rest=now+(reduced?6000:1600)+Math.random()*2000}
         changed=true;
       }
       if(changed)setWalkers(actors.map(({x,y,dir,stride,moving})=>({x,y,dir,stride,moving})));
