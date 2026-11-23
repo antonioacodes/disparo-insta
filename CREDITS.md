@@ -7,3 +7,5 @@ Usados na composição: sala de reunião, pisos, worker, mesas, computadores, ca
 No Escritório, os atlas de personagens, mobiliário, decoração e arquitetura incluem adaptações de cor, escala e pose, combinadas com rua, gramado e divisórias próprios. O crédito acompanha a distribuição da plataforma.
 
 Na sala Central, a mesa e as cadeiras são os sprites `conference_table_front`, `office_chair_front` e `office_chair_back` da Imersa Studios. O notebook, a pilha de papéis e a caneca também vêm do pacote. Os sofás vermelho e verde e a poltrona têm desenho próprio. As estantes combinam livros próprios com a textura de madeira da mesa da Imersa. O pacote Modern tiles_Free não foi utilizado porque sua licença limita o uso à finalidade não comercial.
+
+Jardim da sala de Roteiros: árvores, floreira, banco, grama e pedras em pixel art original do projeto.

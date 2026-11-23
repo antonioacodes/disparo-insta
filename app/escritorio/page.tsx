@@ -16,6 +16,11 @@ import {loadScene} from './assets';
 
 type Point = {x:number;y:number};
 const size=32;
+// Floor interiors, excluding doors and common passageways.
+const lightZones=[
+  {x:1,y:1,w:5,h:4}, {x:19,y:1,w:4,h:5}, {x:1,y:9,w:7,h:4},
+  {x:24,y:7,w:4,h:6}, {x:9,y:1,w:7,h:6},
+];
 const directions:Record<string,Point>={ArrowUp:{x:0,y:-1},ArrowDown:{x:0,y:1},ArrowLeft:{x:-1,y:0},ArrowRight:{x:1,y:0}};
 const aliases:Record<string,string>={w:'ArrowUp',a:'ArrowLeft',s:'ArrowDown',d:'ArrowRight'};
 const same=(a:Point,b:Point)=>a.x===b.x && a.y===b.y;
@@ -187,6 +192,8 @@ export default function Office(){
     for(let y=0;y<rows;y++){
       for(let x=0;x<cols;x++){
         const gid=layers[1].data[y*cols+x],left=x*size,top=y*size;
+        // Raise the lounge picture onto the wall beside the two shelves.
+        if(x===22&&y===7&&gid===22){scene.tile(ctx,gid,x+6/size,y-9/size);continue}
         scene.tile(ctx,gid,x+([7,54].includes(gid)&&frame%8>4?1/32:0),y);
         if(gid===1||gid===2||gid===53){
           ctx.fillStyle=frame%6<3?'#87b8c8':'#96cddd';ctx.fillRect(left+9,top+2,6,1);
@@ -199,6 +206,17 @@ export default function Office(){
         if(gid===19||gid===8){ctx.fillStyle=gid===19?'#8adc9f':'#c3edf4';ctx.fillRect(left+20,top+16+(gid===8?frame%3:0),frame%4===0?2:1,2)}
       }
       entities.filter(e=>Math.floor(e.y)===y).sort((a,b)=>a.y-b.y).forEach(e=>e.draw());
+    }
+    for(const zone of lightZones){
+      const occupied=[avatar,...people].some(p=>p.x+.5>=zone.x&&p.x+.5<zone.x+zone.w&&
+        p.y+.5>=zone.y&&p.y+.5<zone.y+zone.h);
+      const left=zone.x*size,top=zone.y*size,w=zone.w*size,h=zone.h*size;
+      ctx.fillStyle=occupied?'rgba(255,218,148,.065)':'rgba(26,36,62,.46)';
+      ctx.fillRect(left,top,w,h);
+      // A small wall sconce makes the switch visible even on similar floor colors.
+      const lampX=left+w-18;
+      ctx.fillStyle='#4d514c';ctx.fillRect(lampX,top+1,12,4);
+      ctx.fillStyle=occupied?'#ffe2a8':'#747a78';ctx.fillRect(lampX+1,top+2,10,2);
     }
     ctx.font='bold 10px system-ui';ctx.textAlign='center';
     map.rooms.forEach((r,i)=>{
