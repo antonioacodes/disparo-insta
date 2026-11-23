@@ -79,6 +79,11 @@ def project(media, title, preset='{}', remote=False):
     allowed = {'motion':['off','visual','sound'],'format':['vertical','horizontal'],'captions':['generate','preserve','auto','off'],'facecam':['off','always','peaks'],'font':["DejaVu Sans","Montserrat","Anton","Bebas Neue","Oswald","Poppins","Roboto Condensed","Barlow Condensed","Archivo Black","DM Sans","Space Grotesk","DejaVu Serif","Liberation Mono"],'animation':['off','fade','karaoke']}
     if isinstance(settings, dict) and isinstance(settings.get('highlight'), str) and re.fullmatch(r'#[0-9a-fA-F]{6}', settings['highlight']):
         allowed['highlight'] = [settings['highlight']]
+    if isinstance(settings, dict) and 'clipDuration' in settings:
+        value = settings['clipDuration']
+        if value != 'auto' and (not isinstance(value, str) or not re.fullmatch(r'[1-9][0-9]{0,2}', value)):
+            raise ValueError('Escolha uma duração de 1 a 999 segundos.')
+        allowed['clipDuration'] = [value]
     if isinstance(settings, dict) and 'clipCount' in settings:
         count = settings['clipCount']
         if count != 'max' and not (isinstance(count, str) and count.isascii() and count.isdigit() and int(count) > 0):
@@ -109,7 +114,8 @@ def project(media, title, preset='{}', remote=False):
         db.commit()
     return key
 
-def candidates(segments):
+def candidates(segments, minimum=None):
+    low, ideal, high = (30, 45, 65) if minimum is None else (minimum, minimum, minimum + 15)
     options = []
     for i, first in enumerate(segments):
         if i and not segments[i-1]["text"].strip().endswith((".", "!", "?")) and first["start"] - segments[i-1]["end"] < .55:
@@ -117,9 +123,9 @@ def candidates(segments):
         for j in range(i, len(segments)):
             last = segments[j]
             duration = last["end"] - first["start"]
-            if duration > 65:
+            if duration > high:
                 break
-            if duration < 30:
+            if duration < low:
                 continue
             hook = any(w in first["text"].lower() for w in ("como", "por que", "segredo", "?"))
             closed = last["text"].strip().endswith((".", "!", "?"))
@@ -128,7 +134,7 @@ def candidates(segments):
             words = " ".join(seg["text"] for seg in segments[i:j+1]).lower().split()
             if len(set(words)) < 12:
                 continue
-            score = round(55 + 18*hook + 17*closed - abs(duration-45)/3)
+            score = round(55 + 18*hook + 17*closed - abs(duration-ideal)/3)
             options.append((score, first["start"], last["end"], first["text"].strip(), hook, closed))
     chosen = []
     # Earliest finish preserves room for the most independent excerpts.
@@ -151,7 +157,10 @@ def analyze(key):
         command([os.getenv("WHISPER_BIN","whisper"),str(source),"--model",os.getenv("WHISPER_MODEL","small"),"--language","pt","--word_timestamps","True","--output_format","json","--output_dir",str(folder)])
     segments = json.loads(transcript.read_text())["segments"]
     progress("analyze",key,"Selecionando os trechos")
-    options = candidates(segments)
+    preset = db.execute("SELECT settings FROM presets WHERE project=?", (key,)).fetchone()
+    settings = json.loads(preset[0]) if preset else {}
+    size = settings.get('clipDuration', 'auto')
+    options = candidates(segments, None if size == 'auto' else int(size))
     editorial = {}
     model = os.getenv("STUDIO_EDITOR_MODEL")
     if model and options:
@@ -172,8 +181,7 @@ def analyze(key):
                 editorial[item["id"]] = item
         if set(editorial) != set(range(len(options))):
             raise ValueError("Avaliação editorial incompleta")
-    preset = db.execute("SELECT settings FROM presets WHERE project=?", (key,)).fetchone()
-    target = json.loads(preset[0]).get("clipCount", "10") if preset else "10"
+    target = settings.get("clipCount", "10")
     ranked = sorted(enumerate(options), key=lambda pair: editorial.get(pair[0], {}).get("score", pair[1][0]), reverse=True)
     ranked = [pair for pair in ranked if not editorial or editorial[pair[0]]["score"] >= 60]
     if target != "max":

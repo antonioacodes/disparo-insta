@@ -1,7 +1,7 @@
 'use client';
 import {Info, Scissors} from 'lucide-react';
 import {useState} from 'react';
-export const defaults={highlight:'#FFD700',motion:'off',clipCount:'10',format:'vertical',captions:'generate',facecam:'off',font:'DejaVu Sans',animation:'off'};
+export const defaults={highlight:'#FFD700',motion:'off',clipDuration:'auto',clipCount:'10',format:'vertical',captions:'generate',facecam:'off',font:'DejaVu Sans',animation:'off'};
 export type StyleStep='format'|'captions'|'facecam'|'motion'|'animation'|'cuts'|'font';
 export function EditingStyle({value,onChange,step}:{value:typeof defaults;onChange:(v:typeof defaults)=>void;step?:StyleStep}){
   const [expanded,expand]=useState(false);
@@ -41,6 +41,13 @@ export function EditingStyle({value,onChange,step}:{value:typeof defaults;onChan
     <legend>Cor de destaque da palavra</legend>
     <label className="studioTextInput"><input type="color" aria-label="Cor de destaque" style={{width:48,height:36}} value={value.highlight} onChange={e=>onChange({...value,highlight:e.target.value})}/>{value.highlight.toUpperCase()}</label>
     <div className="captionSample" style={{fontFamily:value.font}}><span>A palavra <strong style={{color:value.highlight,fontSize:'115%'}}>falada</strong> ganha destaque.</span></div>
+  </fieldset>}
+  {(!step||step==='cuts')&&<fieldset><legend>Duração dos cortes</legend>
+    <label>Tempo por corte <select value={value.clipDuration??'auto'} onChange={e=>onChange({...value,clipDuration:e.target.value})}>
+      <option value="auto">Automático · padrão de 30 a 65 segundos</option>
+      {[15,30,45,60,90,120,180].map(seconds=><option key={seconds} value={seconds}>Pelo menos {seconds} segundos</option>)}
+    </select></label>
+    {value.clipDuration && value.clipDuration!=='auto' && <p>O Studio pode usar até 15 segundos extras para concluir a fala.</p>}
   </fieldset>}
   {(!step||step==='cuts')&&<fieldset><legend>Quantidade de cortes</legend>
     <div className="choiceRow">

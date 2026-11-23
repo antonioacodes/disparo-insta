@@ -53,16 +53,26 @@ def handle(action,p):
             db.commit()
             raise ValueError('Login ou senha inválidos.')
         db.execute('DELETE FROM failures WHERE login=?',(login,))
+        lifetime = 90 * 24 * 3600
         token=secrets.token_urlsafe(32)
         db.execute('DELETE FROM sessions WHERE expires<?',(now,))
-        db.execute('INSERT INTO sessions VALUES(?,?,?)',(hashlib.sha256(token.encode()).hexdigest(),u['id'],now+43200))
-        return {'token':token}
+        db.execute('INSERT INTO sessions VALUES(?,?,?)',(hashlib.sha256(token.encode()).hexdigest(),u['id'],now+lifetime))
+        return {'token':token,'maxAge':lifetime}
     u=db.execute('SELECT u.id,u.name,u.admin FROM users u JOIN sessions s ON s.user=u.id WHERE s.token=? AND expires>?',(key,now)).fetchone()
     if not u:return {'status':401}
     if action=='session':return dict(u)
     if action=='signout':
         db.execute('DELETE FROM sessions WHERE token=?',(key,))
         db.execute('DELETE FROM visits WHERE session=?',(key,))
+    elif action=='password':
+        db.execute('BEGIN IMMEDIATE')
+        account=db.execute('SELECT salt,password FROM users WHERE id=?',(u['id'],)).fetchone()
+        password=p.get('password','')
+        if not 12<=len(password)<=256 or not hmac.compare_digest(account['password'],digest(p.get('current','')[:256],account['salt'])):
+            raise ValueError('Confira a senha atual e a nova senha.')
+        salt=secrets.token_hex(16)
+        db.execute('UPDATE users SET salt=?,password=? WHERE id=?',(salt,digest(password,salt),u['id']))
+        db.execute('DELETE FROM sessions WHERE user=?',(u['id'],))
     elif action=='users' and u['admin']:
         return {'users':[dict(r) for r in db.execute('SELECT login,name,admin FROM users ORDER BY login')]}
     elif action=='create' and u['admin']:
