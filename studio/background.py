@@ -23,24 +23,28 @@ def run_background(db, work, args, cancelled=None):
             raise EditingPending() from exc
         if editing_pending(db):
             raise EditingPending()
-        child = subprocess.Popen(args, start_new_session=True)
-        try:
-            while True:
-                try:
-                    code = child.wait(timeout=.5)
-                except subprocess.TimeoutExpired:
-                    if cancelled and cancelled():
-                        return
-                    if editing_pending(db):
-                        raise EditingPending()
-                    continue
-                if code:
-                    raise subprocess.CalledProcessError(code, args)
-                return
-        finally:
-            if child.poll() is None:
-                try:
-                    os.killpg(child.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-                child.wait()
+        run_child(args, cancelled, lambda: editing_pending(db))
+
+
+def run_child(args, cancelled=None, should_yield=None):
+    child = subprocess.Popen(args, start_new_session=True)
+    try:
+        while True:
+            try:
+                code = child.wait(timeout=.5)
+            except subprocess.TimeoutExpired:
+                if cancelled and cancelled():
+                    return
+                if should_yield and should_yield():
+                    raise EditingPending()
+                continue
+            if code:
+                raise subprocess.CalledProcessError(code, args)
+            return
+    finally:
+        if child.poll() is None:
+            try:
+                os.killpg(child.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            child.wait()

@@ -375,7 +375,7 @@ Tendências e Publicações aguardam as respectivas integrações. O painel hist
 
 ### Medição antes de ativar Tendências
 
-O orçamento de execução de um relatório pode chegar a cinco horas. A prioridade é preservar CPU e memória para vídeos. O desenho prevê análise em pequenos lotes com uma thread, liberando o bloqueio de CPU entre lotes. As cadências consideradas são diária, a cada três dias ou semanal. A periodicidade definitiva depende da configuração do departamento.
+O orçamento de execução de um relatório pode chegar a cinco horas. A prioridade é preservar CPU e memória para vídeos. Caio pode pesquisar durante uma edição. Há uma pesquisa por vez, com prioridade de CPU reduzida e uma thread de inferência. As cadências consideradas são diária, a cada três dias ou semanal. A periodicidade definitiva depende da configuração do departamento.
 
 Na VPS Linux, com o Ollama local iniciado, rode o ensaio a partir da raiz do projeto. Os dois modelos abaixo são candidatos para comparação. Instale-os apenas se ainda não estiverem disponíveis.
 
@@ -391,4 +391,4 @@ O ensaio usa CPU, uma thread e o mesmo exemplo de tendência para ambos. Ele med
 
 No escritório, clique em Caio e em **Pesquisar tendências**. O YouTube pesquisa vídeos publicados no período e disponíveis na região selecionada. A Twitch pesquisa canais ao vivo no momento da consulta. Os links e nomes vêm das APIs oficiais. Os resultados ficam visíveis enquanto o modelo local prepara a análise.
 
-Na raiz do Studio, configure no arquivo .env ou no ambiente do serviço YOUTUBE_API_KEY (YouTube Data API v3), TWITCH_CLIENT_ID e TWITCH_CLIENT_SECRET (aplicativo Twitch Helix), conforme as fontes desejadas. Configure STUDIO_TRENDS_MODEL com o identificador instalado no Ollama local depois da medição. O worker usa o serviço em 127.0.0.1:11434 com uma thread de CPU. Inicie o worker normal do Studio. Consultas iguais reutilizam o resultado do YouTube por 24 horas e o de lives por 15 minutos. Os relatórios expiram em 30 dias. Edições têm prioridade e a análise retoma a partir dos dados já coletados.
+Na raiz do Studio, configure no arquivo .env ou no ambiente do serviço YOUTUBE_API_KEY (YouTube Data API v3), TWITCH_CLIENT_ID e TWITCH_CLIENT_SECRET (aplicativo Twitch Helix), conforme as fontes desejadas. Configure STUDIO_TRENDS_MODEL com o identificador instalado no Ollama local depois da medição. O worker usa o serviço em 127.0.0.1:11434 com uma thread de CPU. Inicie o worker normal do Studio. Consultas iguais reutilizam o resultado do YouTube por 24 horas e o de lives por 15 minutos. Os relatórios expiram em 30 dias. A fila de tendências é independente da edição. Na VPS, o serviço Ollama também deve receber prioridade de CPU menor que o worker de vídeo.

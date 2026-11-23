@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from studio.trend_ranking import duration, period, rank
-from studio.background import EditingPending, run_background
+from studio.background import run_child
 
 KEYS = ('YOUTUBE_API_KEY', 'TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET', 'STUDIO_TRENDS_MODEL')
 ACTIVE = ('Na fila', 'Pesquisando', 'Analisando', 'Esperando')
@@ -79,7 +79,7 @@ def progress(db, row):
     elif state == 'Concluída':
         stage, label = 3, 'Relatório concluído'
     elif state == 'Esperando':
-        stage, label = int(bool(items)), 'Pausado · aguardando o processamento do Studio'
+        stage, label = int(bool(items)), 'Na fila para retomar a pesquisa'
     elif state in ('Erro','Interrompida'):
         stage, label = int(bool(items)), 'Pesquisa interrompida'
     else:
@@ -227,13 +227,10 @@ def loop(work):
                 cleanup=time.time()+3600
             row=db.execute("SELECT * FROM trend_reports WHERE state NOT IN ('Erro','Concluída','Interrompida') ORDER BY id LIMIT 1").fetchone()
             if row:
-                try:
-                    def cancelled():
-                        return not db.execute("SELECT 1 FROM trend_reports WHERE id=? AND state!='Interrompida'",(row['id'],)).fetchone()
-                    run_background(db,work,[sys.executable,'-m','studio.worker','trend-step',str(row['id'])],cancelled)
-                    continue
-                except EditingPending:
-                    db.execute("UPDATE trend_reports SET state='Esperando' WHERE id=? AND state NOT IN ('Erro','Concluída','Interrompida')",(row['id'],))
+                def cancelled():
+                    return not db.execute("SELECT 1 FROM trend_reports WHERE id=? AND state!='Interrompida'",(row['id'],)).fetchone()
+                run_child(['nice','-n','5',sys.executable,'-m','studio.worker','trend-step',str(row['id'])],cancelled)
+                continue
         except Exception as exc:
             print('Fila de tendências:',type(exc).__name__,flush=True)
         time.sleep(3)

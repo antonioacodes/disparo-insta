@@ -82,7 +82,7 @@ export function Trends(){
     </form>}
     {screen==='reports'&&<><h3>Relatórios</h3>{selected===null?<div className={styles.reportList}>{!data?'Carregando…':data.reports.length===0?'Nenhuma pesquisa registrada.':data.reports.map(r=><button key={r.id} onClick={()=>select(r.id)}><strong>{r.query}</strong><small>{r.platform} · {r.state}</small></button>)}</div>:
       <><button onClick={()=>select(null)}>← Todos os relatórios</button>{!report?<p>Carregando relatório…</p>:<article>
-        <h3>{report.query}</h3><p>{report.platform} · {new Date(report.created*1000).toLocaleDateString('pt-BR')} · {report.state==='Esperando'?'Aguardando liberação do processamento do Studio':report.state}</p>
+        <h3>{report.query}</h3><p>{report.platform} · {new Date(report.created*1000).toLocaleDateString('pt-BR')} · {report.state==='Esperando'?'Na fila para retomar a pesquisa':report.state}</p>
         <footer className={styles.reportActions}>
           {['Concluída','Erro','Interrompida'].includes(report.state)?
             confirmId===report.id?<><span>Excluir este relatório do histórico?</span><button disabled={busy} onClick={()=>confirm(null)}>Manter</button><button disabled={busy} onClick={()=>void manage('delete')}>Confirmar exclusão</button></>:
