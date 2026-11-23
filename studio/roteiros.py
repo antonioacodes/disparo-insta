@@ -228,14 +228,22 @@ def stage(db,work,job):
 
 
 def command(db,action,ident,payload):
+    from studio import producao
+    if action=='arquivo':
+        row=db.execute("SELECT arquivo_final FROM producoes_video WHERE id=? AND arquivo_final IS NOT NULL",(ident,)).fetchone()
+        return {'arquivo':row[0] if row else None}
     if action=='list':
         return [dict(id=r[0],versao=r[1],status=r[2],titulo=r[3],roteiro=json.loads(r[4]) if r[4] else None,
-                     comentario=r[5]) for r in db.execute("""SELECT r.id,versao,r.status,json_extract(b.dados,'$.titulo_provisorio'),
+                     comentario=r[5],producao=producao.review(db,r[0])) for r in db.execute("""SELECT r.id,versao,r.status,json_extract(b.dados,'$.titulo_provisorio'),
                      r.dados,comentario FROM roteiros r JOIN briefings b ON b.id=r.briefing ORDER BY r.criado DESC LIMIT 100""")]
     db.execute('BEGIN IMMEDIATE')
     try:
         if action=='briefing':
             ident=create(db,payload)
+        elif action=='regenerar':
+            producao.regenerate(db,ident,payload)
+        elif action=='aprovar-video':
+            producao.approve(db,ident,payload)
         elif action=='produzir':
             from studio.producao import begin
             begin(db,ident)
@@ -259,13 +267,22 @@ def command(db,action,ident,payload):
         elif action=='retomar':
             job=db.execute("""SELECT j.id FROM jobs j JOIN roteiro_etapas e ON e.job=j.id
                 WHERE e.roteiro=? AND j.state='failed' ORDER BY j.id LIMIT 1""",(ident,)).fetchone()
-            if not job:
-                raise ValueError('Nenhuma etapa com falha.')
-            transition(db,ident,'rascunho')
+            if job:
+                transition(db,ident,'rascunho')
+            else:
+                job=db.execute("SELECT j.id FROM jobs j JOIN producao_etapas e ON e.job=j.id WHERE e.producao=? AND j.state='failed' ORDER BY j.id LIMIT 1",(ident,)).fetchone()
+                if not job:
+                    raise ValueError('Nenhuma etapa com falha.')
+                transition(db,ident,'em_producao')
             db.execute("UPDATE jobs SET state='queued',error=NULL WHERE id=?",(job[0],))
         else:
             raise ValueError('Ação indisponível.')
         db.commit()
+        if action=='aprovar-video':
+            import shutil
+            folder=producao.root()/ident/'cenas'
+            if folder.is_dir():
+                shutil.rmtree(folder)
         return {'id':ident}
     except BaseException:
         db.rollback()

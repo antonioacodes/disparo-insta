@@ -290,7 +290,7 @@ export default function Office(){
       <button autoFocus onClick={()=>select(null)} aria-label="Fechar detalhes">×</button>
       {room===-1&&<><h2>Central de operações</h2>{rooms.map((r,i)=><section key={r.name} className={styles.detail}><h3>{r.person} · {r.name}</h3>{details(i)}</section>)}</>}
       {room!==null&&room>=0&&<Department {...rooms[room]} onBack={view==='home'?undefined:()=>setView('home')}>
-        {room===1&&<Trends/>}{room===3&&<Roteiros/>}
+        {room===1&&<Trends/>}{room===3&&<Roteiros/>}{room===2&&<Roteiros publicacoes/>}
         {room!==1&&room!==3&&view==='home'&&<>
           {room===0&&<div className={styles.editActivity}><strong>{current?.stage||current?.label||(data?'Sem tarefa em execução':'Consultando a fila…')}</strong><small>{data?pending+' na fila':'Consultando o Studio'}{rooms[0].working?' · '+eta:''}</small>{rooms[0].working&&<progress aria-label="Progresso estimado da edição" value={prediction?.percent} max={100}/>}</div>}
           <div className={styles.actions}>{room===0?<>

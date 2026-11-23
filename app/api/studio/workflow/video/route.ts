@@ -1,3 +1,5 @@
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
 import {open} from 'node:fs/promises';
 import path from 'node:path';
 import {Readable} from 'node:stream';
@@ -6,8 +8,16 @@ export async function GET(request:Request) {
   const params = new URL(request.url).searchParams;
   const id = params.get('id') || '';
   const kind = params.get('kind');
-  if (!/^[a-f0-9]{32}-\d+$/.test(id) || !['preview','final'].includes(kind||'')) return new Response(null,{status:400});
-  const file = await open(path.join(process.cwd(),'storage','studio',id.split('-')[0],id+'-'+kind+'.mp4'),'r').catch(()=>null);
+  let filename:string;
+  if(kind==='producao' && /^[a-f0-9]{32}$/.test(id)){
+    const {stdout}=await promisify(execFile)('python3',['-m','studio.worker','roteiros','arquivo',id]);
+    filename=JSON.parse(stdout).arquivo;
+    if(!filename)return new Response(null,{status:404});
+  }else{
+    if(!/^[a-f0-9]{32}-\d+$/.test(id)||!['preview','final'].includes(kind||''))return new Response(null,{status:400});
+    filename=path.join(process.cwd(),'storage','studio',id.split('-')[0],id+'-'+kind+'.mp4');
+  }
+  const file=await open(filename,'r').catch(()=>null);
   if (!file) return new Response(null,{status:404});
   const {size} = await file.stat();
   const range = request.headers.get('range');

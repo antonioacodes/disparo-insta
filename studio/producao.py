@@ -159,7 +159,7 @@ def process(db,work,job):
         if not voice or not Path(voice).is_file():
             raise ValueError('Configure o arquivo da voz em PIPER_MODEL_PATH.')
         path=media/(name+'.wav')
-        subprocess.run(['piper','--model',voice,'--output_file',str(path)],input=scene['narracao'],text=True,check=True,timeout=900)
+        subprocess.run([shutil.which('piper') or '/home/acodes-painel/piper-env/bin/piper','--model',voice,'--output_file',str(path)],input=scene['narracao'],text=True,check=True,timeout=900)
         audio_seconds(path)
     elif stage=='montagem':
         duration=audio_seconds(media/(name+'.wav'))
@@ -200,3 +200,36 @@ def process(db,work,job):
     except BaseException:
         db.rollback()
         raise
+
+
+def review(db,pid):
+    row=db.execute('SELECT * FROM producoes_video WHERE id=?',(pid,)).fetchone()
+    if not row:
+        return None
+    steps=[dict(r) for r in db.execute('SELECT etapa,cena,inicio,fim FROM producao_etapas WHERE producao=? ORDER BY job',(pid,))]
+    assets=[dict(r) for r in db.execute('SELECT cena,origem,url,autor,licenca FROM assets_producao WHERE producao=? ORDER BY cena',(pid,))]
+    return dict(etapa=row['etapa'],erro=row['erro'],chamadas=row['chamadas_pexels'],etapas=steps,
+                pronto=bool(row['arquivo_final']),assets=assets)
+
+
+def regenerate(db,ident,payload):
+    part=payload.get('parte')
+    index=payload.get('cena')
+    allowed={'narracao':['narracao','montagem','legendas'],'broll':['broll','montagem','legendas'],'legendas':['legendas']}
+    if part not in allowed or type(index) is not int:
+        raise ValueError('Cena ou etapa inválida.')
+    if not db.execute('SELECT 1 FROM cenas WHERE roteiro=? AND ordem=?',(ident,index)).fetchone():
+        raise ValueError('Cena indisponível.')
+    transition(db,ident,'em_producao',payload.get('comentario'))
+    for stage in [*allowed[part],'finalizar']:
+        db.execute("""UPDATE jobs SET state='queued',error=NULL WHERE id IN
+           (SELECT job FROM producao_etapas WHERE producao=? AND etapa=? AND cena=?)""",(ident,stage,0 if stage=='finalizar' else index))
+    db.execute("UPDATE producao_etapas SET inicio=NULL,fim=NULL WHERE producao=? AND job IN (SELECT id FROM jobs WHERE state='queued')",(ident,))
+    db.execute("UPDATE producoes_video SET etapa='na_fila',fim=NULL WHERE id=?",(ident,))
+
+
+def approve(db,ident,payload):
+    if type(payload.get('rotulagem_ia')) is not bool or payload.get('revisado') is not True:
+        raise ValueError('Confirme a revisão do vídeo e a rotulagem.')
+    transition(db,ident,'aprovado_para_publicacao')
+    db.execute('UPDATE producoes_video SET rotulagem_ia=? WHERE id=?',(payload['rotulagem_ia'],ident))

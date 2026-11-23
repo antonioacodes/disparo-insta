@@ -1,12 +1,13 @@
 import {useEffect,useState} from 'react';
 import styles from './office.module.css';
 
-type Scene={id:string;tipo:string;narracao:string;verificar:boolean;fontes:string[]};
-type Item={id:string;versao:number;titulo:string;status:string;comentario:string|null;roteiro:{cenas:Scene[]}|null};
+type Scene={id:string;tipo:string;legenda_destaque:string;narracao:string;verificar:boolean;fontes:string[]};
+type Item={id:string;versao:number;titulo:string;status:string;comentario:string|null;producao:{etapa:string;erro:string|null;chamadas:number;pronto:boolean;etapas:{etapa:string;cena:number;inicio:number|null;fim:number|null}[];assets:{origem:string;autor:string;url:string}[]}|null;roteiro:{cenas:Scene[]}|null};
 const endpoint='/api/studio/workflow';
-export function Roteiros(){
+export function Roteiros({publicacoes=false}:{publicacoes?:boolean}){
   const [rows,setRows]=useState<Item[]>([]),[selected,setSelected]=useState(''),[creating,setCreating]=useState(false);
   const [error,setError]=useState(''),[busy,setBusy]=useState(false),[comment,setComment]=useState(''),[reviewed,setReviewed]=useState(false);
+  const [rotulagem,setRotulagem]=useState(true);
   const item=rows.find(r=>r.id===selected);
   async function refresh(){const response=await fetch(endpoint+'?roteiros=1',{cache:'no-store'});if(!response.ok)throw Error('Falha ao consultar roteiros.');setRows(await response.json())}
   useEffect(()=>{const update=()=>refresh().catch(e=>setError(e.message));void update();const timer=setInterval(update,6000);return ()=>clearInterval(timer)},[]);
@@ -17,6 +18,9 @@ export function Roteiros(){
       await refresh();setSelected(data.id);setCreating(false);setReviewed(false);setComment('');
     }catch(e){setError(e instanceof Error?e.message:'Operação indisponível.')}finally{setBusy(false)}
   }
+  if(publicacoes)return <section className={styles.scriptPanel}><h3>Pronto para publicar</h3>
+    {error&&<p role="alert">{error}</p>}{rows.filter(r=>r.status==='aprovado_para_publicacao').map(r=><article key={r.id}><strong>{r.titulo}</strong><video controls preload="none" src={'/api/studio/workflow/video?kind=producao&id='+r.id}/></article>)}
+    {!rows.some(r=>r.status==='aprovado_para_publicacao')&&<p>Sem dados ainda</p>}<button disabled>Publicar</button><small>Ação disponível após confirmação de acesso</small></section>;
   return <section className={styles.scriptPanel}>
     {error&&<p role="alert">{error}</p>}
     {creating?<form onSubmit={e=>{e.preventDefault();const form=new FormData(e.currentTarget);
@@ -34,6 +38,19 @@ export function Roteiros(){
       {item.status==='aguardando_aprovacao'&&<><label><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/> Revisei a narração, as fontes e os trechos sinalizados.</label>
         <button disabled={!reviewed||busy} onClick={()=>act('aprovar',{revisado:true})}>Aprovar roteiro</button>
         <label>Comentário da revisão<textarea value={comment} onChange={e=>setComment(e.target.value)}/></label><button disabled={busy||!comment.trim()} onClick={()=>act('rejeitar',{comentario:comment})}>Devolver roteiro</button></>}
+      {item.status==='aprovado'&&<button disabled={busy} onClick={()=>act('produzir')}>Produzir vídeo</button>}
+      {item.producao&&<section><h3>Revisão do vídeo</h3><p>{item.producao.etapa} · {item.producao.chamadas} consultas ao Pexels</p>
+        {item.producao.erro&&<p role="alert">{item.producao.erro}</p>}
+        {item.producao.pronto&&<video key={item.producao.etapas[item.producao.etapas.length-1]?.fim??undefined} controls playsInline preload="metadata" src={'/api/studio/workflow/video?kind=producao&id='+item.id}/>}
+        <details><summary>Tempos e créditos</summary>{item.producao.etapas.map(e=><p key={e.etapa+e.cena}>{e.etapa} · cena {e.cena+1} · {e.inicio&&e.fim?Math.round(e.fim-e.inicio)+' s':'Sem dados ainda'}</p>)}
+        {item.producao.assets.map((a,i)=><p key={i}>{a.url?<a href={a.url} target="_blank" rel="noreferrer">{a.autor} · Pexels</a>:a.origem}</p>)}</details>
+        {item.status==='aguardando_revisao_video'&&<><label>Comentário de revisão<textarea value={comment} onChange={e=>setComment(e.target.value)}/></label>
+          {item.roteiro?.cenas.map((c,i)=><details key={c.id}><summary>Cena {i+1} · {c.tipo}</summary><p>{c.legenda_destaque}</p>
+          {['narracao','broll','legendas'].map(parte=><button key={parte} disabled={busy||!comment.trim()} onClick={()=>act('regenerar',{cena:i,parte,comentario:comment})}>Refazer {parte}</button>)}</details>)}
+          <label><input type="checkbox" checked={rotulagem} onChange={e=>setRotulagem(e.target.checked)}/> Rotular uso de IA</label>
+          <small>Confira a política de rotulagem de cada plataforma antes de publicar.</small>
+          <button disabled={busy} onClick={()=>act('aprovar-video',{rotulagem_ia:rotulagem,revisado:true})}>Aprovar vídeo para publicação</button></>}
+      </section>}
       {['rejeitado','aprovado','aguardando_aprovacao'].includes(item.status)&&<button disabled={busy} onClick={()=>act('nova-versao')}>Criar nova versão</button>}
     </>:<><button onClick={()=>setCreating(true)}>Criar briefing</button>{rows.length===0?<p>Sem dados ainda</p>:rows.map(r=><button key={r.id} onClick={()=>setSelected(r.id)}>{r.titulo} · v{r.versao}<small>{r.status.replaceAll('_',' ')}</small></button>)}</>}
   </section>
