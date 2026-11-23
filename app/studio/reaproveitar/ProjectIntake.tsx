@@ -3,20 +3,42 @@ import {useEffect,useState} from 'react';
 import {EditingStyle,defaults,type StyleStep} from '../EditingStyle';
 import {ProjectName,SourcePicker} from '../ProjectFields';
 
+async function readReply(response:Response, action:string){
+  if(response.headers.get('content-type')?.includes('application/json')){
+    const result=await response.json().catch(()=>null);
+    if(result && response.ok)return result;
+    if(result?.error)throw Error(result.error);
+  }
+  if(response.status===413)throw Error('O servidor recusou o tamanho do envio.');
+  if(response.redirected||[401,403].includes(response.status))throw Error('Confira seu acesso ao Studio antes de tentar novamente.');
+  throw Error(action+' O servidor respondeu HTTP '+response.status+'.');
+}
+
 async function uploadFile(file:File,notify:(message:string)=>void){
-  const size=512*1024, total=Math.ceil(file.size/size), id=crypto.randomUUID(),start=Date.now();
+  const size=512*1024,total=Math.ceil(file.size/size),id=crypto.randomUUID(),start=Date.now();
+  let recovered=false;
   for(let index=0;index<total;index++){
     const remaining=index?Math.ceil((Date.now()-start)/index*(total-index)/60000):0;
-    notify(`Enviando vídeo · ${Math.floor(index/total*100)}%${remaining?' · cerca de '+remaining+' min restantes':''}`);
-    const response=await fetch('/api/studio/upload/chunk',{method:'POST',headers:{
-      'x-upload-id':id,'x-chunk-index':String(index),'x-total-chunks':String(total),
-      'x-file-name-utf8':encodeURIComponent(file.name),'x-file-type':file.type},
-      body:file.slice(index*size,(index+1)*size)});
-    const part=await response.json();
-    if(!response.ok)throw Error(part.error||'Falha no envio do vídeo.');
-    if(part.media)return String(part.media.id);
+    for(let attempt=0;;attempt++){
+      notify(attempt?`Reconectando · repetindo o bloco ${index+1} de ${total}`:
+        `Enviando vídeo · ${Math.floor(index/total*100)}%${remaining?' · cerca de '+remaining+' min restantes':''}`);
+      const response=await fetch('/api/studio/upload/chunk',{method:'POST',headers:{
+        'x-upload-id':id,'x-chunk-index':String(index),'x-total-chunks':String(total),
+        'x-file-name-utf8':encodeURIComponent(file.name),'x-file-type':file.type},
+        body:file.slice(index*size,(index+1)*size)}).catch(()=>null);
+      if((!response||[408,429,502,503,504].includes(response.status))&&attempt<5){
+        await new Promise(resolve=>setTimeout(resolve,1000*2**attempt));
+        continue;
+      }
+      if(!response)throw Error('A conexão caiu durante o envio. Confira a rede e tente novamente.');
+      const part=await readReply(response,'Falha ao enviar o vídeo.');
+      if(part.media?.id)return String(part.media.id);
+      // A lost final response can leave only the retried chunk on the server.
+      if(index===total-1&&!recovered){recovered=true;index=-1}
+      break;
+    }
   }
-  throw Error('O envio terminou sem um arquivo de vídeo disponível.');
+  throw Error('O servidor não confirmou o recebimento do vídeo completo.');
 }
 
 export function ProjectIntake({onCreated,useStored=false,guided=false}:{onCreated:(id:string)=>void;useStored?:boolean;guided?:boolean}){
@@ -44,7 +66,7 @@ export function ProjectIntake({onCreated,useStored=false,guided=false}:{onCreate
       }
       notify('Adicionando o projeto à fila…');
       const response=await fetch('/api/studio/workflow',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-      const result=await response.json();
+      const result=await readReply(response,'Falha ao adicionar o projeto à fila.');
       if(!response.ok||!result.project)throw Error(result.error||'Falha ao criar projeto.');
       notify('Projeto na fila de edição.');onCreated(result.project);
     }catch(error){notify(error instanceof Error?error.message:'Falha ao processar o vídeo.')}

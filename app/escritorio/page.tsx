@@ -22,7 +22,7 @@ function OfficeVideo({id,kind}:{id:string;kind:string}){
 }
 function walkable(p:Point,solid:number[]){
   const tile=map.tiles[p.y]?.[p.x];
-  return tile!==undefined && solid[p.y*map.tiles[0].length+p.x]===0 && !map.rooms.some(room=>same(room,p));
+  return tile!==undefined && solid[p.y*map.tiles[0].length+p.x]===0;
 }
 function path(from:Point,to:Point,solid:number[]){
   const queue=[from], parents=new Map<Point,Point>(), seen=new Set([from.x+','+from.y]);
@@ -67,10 +67,54 @@ export default function Office(){
     const status=i===1?(failed?'Sem conexão':data?.trendStatus??'Conectando'):i!==0?'Ainda não configurado':failed?'Sem conexão':data?.status??'Conectando';
     return {...r,status,working:status==='Trabalhando'};
   });
-  const people=rooms.map(r=>{
-    const seated=r.working||r.status==='Ocioso';
-    return {...r,seated,...(seated?r.seat:{x:r.x,y:r.y})};
-  });
+  const [walkers,setWalkers]=useState(()=>map.rooms.map(r=>({x:r.x,y:r.y,dir:'down',stride:0,moving:false})));
+  const hovered=useRef(-1);
+  const statusKey=rooms.map(r=>r.status).join('|');
+  useEffect(()=>{
+    if(!solid)return;
+    const states=statusKey.split('|');
+    const actors=map.rooms.map((r,i)=>({...(states[i]==='Trabalhando'?r.seat:{x:r.x,y:r.y}),
+      dir:'down',stride:0,moving:false,steps:[] as Point[],rest:performance.now()+600+i*450}));
+    const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let last=performance.now();
+    const clock=setInterval(()=>{
+      const now=performance.now(),advance=Math.min(now-last,100)*.002;
+      last=now;
+      if(document.hidden||reduced)return;
+      let changed=false;
+      for(let i=0;i<actors.length;i++){
+        const a=actors[i];
+        if(states[i]!=='Ocioso'||hovered.current===i||now<a.rest)continue;
+        if(!a.steps.length){
+          const destinations=solid.flatMap((gid,k)=>gid?[]:[{x:k%map.tiles[0].length,y:Math.floor(k/map.tiles[0].length)}]);
+          const dest=destinations[Math.floor(Math.random()*destinations.length)];
+          if(dest)a.steps=path({x:Math.round(a.x),y:Math.round(a.y)},dest,solid);
+          if(!a.steps.length){a.rest=now+700;continue}
+        }
+        const target=a.steps[0];
+        const occupied=(p:Point)=>Math.hypot(p.x-target.x,p.y-target.y)<.8;
+        if(occupied(position.current)||actors.some((other,j)=>j!==i&&
+          (occupied(other)||other.moving&&other.steps[0]&&same(other.steps[0],target)))){
+          a.steps=[];a.rest=now+800;a.moving=false;changed=true;continue;
+        }
+        const dx=target.x-a.x,dy=target.y-a.y,length=Math.hypot(dx,dy);
+        const step=Math.min(advance,length);
+        a.dir=Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up');
+        a.stride+=step;a.moving=true;
+        if(step===length){a.x=target.x;a.y=target.y;a.steps.shift()}
+        else{a.x+=dx*step/length;a.y+=dy*step/length}
+        if(!a.steps.length){a.moving=false;a.rest=now+1600+Math.random()*2000}
+        changed=true;
+      }
+      if(changed)setWalkers(actors.map(({x,y,dir,stride,moving})=>({x,y,dir,stride,moving})));
+    },50);
+    setWalkers(actors.map(({x,y,dir,stride,moving})=>({x,y,dir,stride,moving})));
+    return ()=>clearInterval(clock);
+  },[solid,statusKey]);
+  const people=rooms.map((r,i)=>({...r,...(r.working?r.seat:r.status==='Ocioso'?walkers[i]:{x:r.x,y:r.y}),seated:r.working}));
+  const occupiedRef=useRef<Point[]>([]);
+  occupiedRef.current=people;
+  const occupiedByAgent=(p:Point)=>occupiedRef.current.some(a=>Math.hypot(a.x-p.x,a.y-p.y)<.8);
   const total=done+pending+Number(rooms[0].working);
   const ready=data?.ready??[];
   const current=data?.current;
@@ -99,8 +143,9 @@ export default function Office(){
       const p=position.current;
       if(!route.current.length&&held.current){
         const n={x:Math.round(p.x)+held.current.x,y:Math.round(p.y)+held.current.y};
-        if(solid&&walkable(n,solid))route.current=[n];
+        if(solid&&walkable(n,solid)&&!occupiedByAgent(n))route.current=[n];
       }
+      if(route.current[0]&&occupiedByAgent(route.current[0]))route.current=[];
       const target=route.current[0];
       if(target){
         const dx=target.x-p.x,dy=target.y-p.y,len=Math.hypot(dx,dy);
@@ -127,7 +172,9 @@ export default function Office(){
         scene.actor(ctx,i,r.x,r.y-0.54,'up',r.working?'Digitar':'Sentar',frame);
         scene.tile(ctx,18,r.x,r.y);
       }else{
-        scene.actor(ctx,i,r.x,r.y,'down','Café',frame);
+        const walker=walkers[i];
+        const moving=r.status==='Ocioso'&&walker.moving;
+        scene.actor(ctx,i,r.x,r.y,r.status==='Ocioso'?walker.dir:'down',moving?'Andar':'Café',moving?Math.floor(walker.stride*8):frame);
       }
     }}));
     entities.push({x:avatar.x,y:avatar.y,draw:()=>scene.actor(ctx,3,avatar.x,avatar.y,facing.current,walking.current?'Andar':'Parado',walking.current?Math.floor(distance.current*8):frame)});
@@ -153,7 +200,7 @@ export default function Office(){
       ctx.fillStyle='#ffefd4';ctx.fillRect(r.signX*size-28,r.signY*size+1,80,14);
       ctx.fillStyle='#384553';ctx.fillText(r.name,r.signX*size+12,r.signY*size+12);
     });
-  },[avatar,frame,scene,data,failed]);
+  },[avatar,frame,scene,data,failed,walkers]);
   const anchor=(x:number,y:number)=>({left:(x+.5)*size/width*100+'%',top:y*size/height*100+'%'});
   return <main className={styles.office} aria-label="Escritório virtual">
     <header className={styles.hud}><Link href="/studio" className={styles.back} aria-label="Voltar ao Studio" title="Voltar ao Studio">←</Link>
@@ -180,7 +227,7 @@ export default function Office(){
         route.current=route.current.slice(0,1);
         if(!e.repeat&&!route.current.length){
           const n={x:Math.round(position.current.x)+delta.x,y:Math.round(position.current.y)+delta.y};
-          if(solid&&walkable(n,solid))route.current=[n];
+          if(solid&&walkable(n,solid)&&!occupiedByAgent(n))route.current=[n];
         }
       }}
       onKeyUp={e=>{if(directions[aliases[e.key.toLowerCase()]||e.key]===held.current)held.current=null}}
@@ -201,7 +248,7 @@ export default function Office(){
         route.current=[...first,...(solid?path(first[0]||position.current,p,solid):[])];
       }}/>
     {people.map((r,i)=><div key={r.name}>
-      <button className={styles.person} aria-label={r.person+" · "+r.name} style={anchor(r.x,r.y+(r.seated?-.8:-.5))} onClick={()=>select(i)}>
+      <button className={styles.person} aria-label={r.person+" · "+r.name} onPointerEnter={()=>{hovered.current=i}} onPointerLeave={()=>{hovered.current=-1}} onFocus={()=>{hovered.current=i}} onBlur={()=>{hovered.current=-1}} style={anchor(r.x,r.y+(r.seated?-.8:-.5))} onClick={()=>select(i)}>
         <span className={styles.tag}><strong title={r.status}><StatusIcon status={r.status}/>{r.person}</strong>{r.working&&i===1&&<><small>{data?.trendTask?.state}</small><TrendProgress compact progress={data?.trendTask?.progress}/></>}{r.working&&i===0&&<>
           <small>Trabalhando · {eta}</small>
           <progress aria-label="Progresso estimado da tarefa" value={prediction?.percent} max={100}
@@ -217,15 +264,15 @@ export default function Office(){
       <b>Central de operações</b>{ready.length>0&&<span className={styles.ready}>{ready.length} {ready.length===1?'vídeo pronto':'vídeos prontos'}</span>}
 
     </button></div></div>
-    <dialog ref={dialog} onClose={()=>{select(null);setView('home');setNewProject('')}} className={styles.dialog}>
+    <dialog ref={dialog} onClose={()=>{select(null);setView('home');setNewProject('')}} className={[styles.dialog,room===0?styles.editDepartment:''].join(' ')}>
       <button autoFocus onClick={()=>select(null)} aria-label="Fechar detalhes">×</button>
       {room===-1&&<><h2>Central de operações</h2>{rooms.map((r,i)=><section key={r.name} className={styles.detail}><h3>{r.person} · {r.name}</h3>{details(i)}</section>)}</>}
       {room!==null&&room>=0&&<Department {...rooms[room]} onBack={view==='home'?undefined:()=>setView('home')}>
         {room===1&&<Trends/>}
         {room!==1&&view==='home'&&<>
-          {room===0&&<p>{current?.stage||current?.label||(data?'Sem tarefa em execução':'Consultando a fila…')}{data&&' · '+pending+' na fila'}</p>}
+          {room===0&&<div className={styles.editActivity}><strong>{current?.stage||current?.label||(data?'Sem tarefa em execução':'Consultando a fila…')}</strong><small>{data?pending+' na fila':'Consultando o Studio'}{rooms[0].working?' · '+eta:''}</small>{rooms[0].working&&<progress aria-label="Progresso estimado da edição" value={prediction?.percent} max={100}/>}</div>}
           <div className={styles.actions}>{room===0?<>
-            <ActionCard title="Edição" caption="Criar um projeto" onClick={()=>{setNewProject('');setView('edit')}}/>
+            <ActionCard title="Criar projeto" caption="Escolher o vídeo e definir o estilo dos cortes" onClick={()=>{setNewProject('');setView('edit')}}/>
             <ActionCard title="Vídeos prontos" caption={data?ready.length+' disponíveis':'Consultar vídeos'} onClick={()=>setView('ready')}/>
           </>:<ActionCard title="Integração" caption="Consultar disponibilidade" onClick={()=>setView('info')}/>}</div>
           {room===0&&newProject&&<p role="status">Projeto enviado para a fila de edição.</p>}
