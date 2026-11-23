@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from studio.trend_ranking import duration, period, rank
+from studio.model_slot import model_slot
 from studio.background import run_child
 
 KEYS = ('YOUTUBE_API_KEY', 'TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET', 'STUDIO_TRENDS_MODEL')
@@ -186,25 +187,26 @@ def step(db, ident):
                 +json.dumps(dict(tema=row['query'],candidatos=shortlist),ensure_ascii=False))
     payload=dict(model=cfg['STUDIO_TRENDS_MODEL'],prompt=prompt,stream=True,keep_alive=0,
                  options=dict(num_gpu=0,num_thread=1,num_ctx=4096,num_predict=260,temperature=0))
-    db.execute("INSERT OR REPLACE INTO trend_timing(report,model,started) VALUES(?,?,?)",
-               (ident,cfg['STUDIO_TRENDS_MODEL'],time.time()))
-    req=urllib.request.Request('http://127.0.0.1:11434/api/generate',data=json.dumps(payload).encode(),
-                               headers={'Content-Type':'application/json'})
-    parts=[]
-    done=False
-    with urllib.request.urlopen(req,timeout=1800) as response:
-        for line in response:
-            chunk=json.loads(line)
-            if chunk.get('error'):
-                raise ValueError('Falha do modelo')
-            piece=chunk.get('response','')
-            if piece:
-                if not parts:
-                    db.execute('UPDATE trend_timing SET first_word=? WHERE report=?',(time.time(),ident))
-                parts.append(piece)
-            if chunk.get('done'):
-                done=True
-                break
+    with model_slot(Path(db.execute('PRAGMA database_list').fetchone()[2]).parent):
+        db.execute("INSERT OR REPLACE INTO trend_timing(report,model,started) VALUES(?,?,?)",
+                   (ident,cfg['STUDIO_TRENDS_MODEL'],time.time()))
+        req=urllib.request.Request('http://127.0.0.1:11434/api/generate',data=json.dumps(payload).encode(),
+                                   headers={'Content-Type':'application/json'})
+        parts=[]
+        done=False
+        with urllib.request.urlopen(req,timeout=1800) as response:
+            for line in response:
+                chunk=json.loads(line)
+                if chunk.get('error'):
+                    raise ValueError('Falha do modelo')
+                piece=chunk.get('response','')
+                if piece:
+                    if not parts:
+                        db.execute('UPDATE trend_timing SET first_word=? WHERE report=?',(time.time(),ident))
+                    parts.append(piece)
+                if chunk.get('done'):
+                    done=True
+                    break
     if not done:
         raise ValueError('Resposta interrompida')
     answer=''.join(parts).strip()

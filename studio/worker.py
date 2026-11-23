@@ -15,6 +15,7 @@ from pathlib import Path
 
 from studio.delete_project import delete_project
 from studio import trends
+from studio.model_slot import model_slot
 from studio.background import EditingPending, run_background
 from studio.cache import maintain, remove_preview, RETENTION
 
@@ -363,7 +364,7 @@ def score_audience(cid, output):
                   "Considere especialmente os primeiros 3 segundos. Avalie somente conteúdo e ritmo da transcrição. "
                   "Responda JSON com resumo, sugestao e personas, uma por perfil em ordem. Cada persona contém motivo e notas (objeto com todas as dimensões, inteiros de 0 a 100). "
                   +json.dumps([profiles,dimensions,inputs],ensure_ascii=False))
-        payload = json.dumps({"model":model,"stream":False,"format":"json","prompt":prompt}).encode()
+        payload = json.dumps({"model":model,"keep_alive":0,"stream":False,"format":"json","prompt":prompt}).encode()
         req = urllib.request.Request("http://127.0.0.1:11434/api/generate",data=payload,headers={"Content-Type":"application/json"})
         with urllib.request.urlopen(req,timeout=240) as response:
             verdict = json.loads(json.load(response)["response"])
@@ -543,7 +544,8 @@ if __name__ == "__main__":
     elif opts.action == "delete-project":
         delete_project(db,WORK,opts.args[0])
     elif opts.action == "score-audience":
-        score_audience(*opts.args)
+        with model_slot(WORK):
+            score_audience(*opts.args)
     elif opts.action == "audience":
         audience_loop(opts.args[0] if opts.args else None)
     elif opts.action == "work":
