@@ -1,10 +1,15 @@
 'use client';
 import {Info} from 'lucide-react';
 import {useState} from 'react';
-export const defaults={clipCount:'10',format:'vertical',captions:'generate',facecam:'off',font:'DejaVu Sans',animation:'off'};
+export const defaults={motion:'off',clipCount:'10',format:'vertical',captions:'generate',facecam:'off',font:'DejaVu Sans',animation:'off'};
 export function EditingStyle({value,onChange}:{value:typeof defaults;onChange:(v:typeof defaults)=>void}){
   const [expanded,expand]=useState(false);
   const notes:Record<string, Record<string,string>>={
+    motion:{
+      off:'Mantém o ritmo original da gravação.',
+      visual:'Uma aproximação breve destaca a retomada da fala depois de uma pausa.',
+      sound:'Acrescenta um toque suave à aproximação. Até três destaques por corte, conforme as pausas da fala.'
+    },
     format:{vertical:'Preenche o quadro vertical com o centro do vídeo. A exportação tem 1080 × 1920 pixels.',horizontal:'Preenche o quadro horizontal com o centro do vídeo. A exportação tem 1920 × 1080 pixels.'},
     captions:{
       generate:'Grava a transcrição da fala na imagem com a fonte escolhida. Use em vídeos sem legenda embutida para evitar texto sobreposto.',
@@ -26,6 +31,7 @@ export function EditingStyle({value,onChange}:{value:typeof defaults;onChange:(v
     ['format','Formato do vídeo',[['vertical','Vertical · 9:16'],['horizontal','Horizontal · 16:9']]],
     ['captions','Legendas',[['generate','Gerar legendas'],['preserve','Preservar originais'],['auto','Detectar no vídeo'],['off','Desativado']]],
     ['facecam','Facecam',[['off','Desativada'],['always','Corte inteiro'],['peaks','Picos de volume']]],
+    ['motion','Ritmo da edição',[['off','Original'],['visual','Ênfase visual'],['sound','Ênfase visual + som']]],
     ['animation','Animação de texto',[['off','Estática'],['fade','Entrada suave']]]
   ] as const;
   return <section className="editStyle"><h2>Estilo do projeto</h2>{choices.map(([key,label,items])=><fieldset key={key}><legend>{label}</legend><div className="choiceRow">{items.map(([id,name])=><button type="button" aria-pressed={value[key]===id} key={id} onClick={()=>onChange({...value,[key]:id})}>{name}</button>)}</div><div className="styleNote" role="status"><Info size={17} aria-hidden="true"/><span>{notes[key][value[key]]}</span></div></fieldset>)}

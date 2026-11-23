@@ -71,7 +71,7 @@ def command(args):
 
 def project(media, title, preset='{}', remote=False):
     settings = json.loads(preset)
-    allowed = {'format':['vertical','horizontal'],'captions':['generate','preserve','auto','off'],'facecam':['off','always','peaks'],'font':["DejaVu Sans","Montserrat","Anton","Bebas Neue","Oswald","Poppins","Roboto Condensed","Barlow Condensed","Archivo Black","DM Sans","Space Grotesk","DejaVu Serif","Liberation Mono"],'animation':['off','fade']}
+    allowed = {'motion':['off','visual','sound'],'format':['vertical','horizontal'],'captions':['generate','preserve','auto','off'],'facecam':['off','always','peaks'],'font':["DejaVu Sans","Montserrat","Anton","Bebas Neue","Oswald","Poppins","Roboto Condensed","Barlow Condensed","Archivo Black","DM Sans","Space Grotesk","DejaVu Serif","Liberation Mono"],'animation':['off','fade']}
     if isinstance(settings, dict) and 'clipCount' in settings:
         count = settings['clipCount']
         if count != 'max' and not (isinstance(count, str) and count.isascii() and count.isdigit() and int(count) > 0):
@@ -246,6 +246,13 @@ def render(cid, final):
     burn = bool(blocks)
     base = f"scale={w}:{h}:force_original_aspect_ratio=increase,{crop},setsar=1"
     filters = "[0:v]"+base+"[base];"
+    audio_map = "0:a:0?"
+    motion = settings.get("motion", "off")
+    if motion != "off":
+        from studio.motion import accents, motion_filters
+        beats = accents(captions(cid), row["start"], row["end"])
+        if beats:
+            filters, audio_map = motion_filters(filters, beats, w, h, motion == "sound")
     region = face_region(source,row["start"],row["end"]) if face!="off" else None
     layer = "base"
     if region:
@@ -264,7 +271,7 @@ def render(cid, final):
         animated_subtitles(subtitle,cues,horizontal)
     filters += f"[{layer}]"+(f"subtitles={subtitle}:force_style='FontName={font},Bold=1,FontSize=14,MarginV=22'" if burn else "null")+"[out]"
     progress(kind,cid,"Gerando o vídeo final" if final else "Gerando a prévia")
-    command(["ffmpeg","-loglevel","error","-y","-ss",str(row["start"]),"-i",str(ROOT/"media"/row["media"]),"-t",str(row["end"]-row["start"]),"-filter_complex",filters,"-map","[out]","-map","0:a:0?","-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-movflags","+faststart",str(tmp)])
+    command(["ffmpeg","-loglevel","error","-y","-ss",str(row["start"]),"-i",str(ROOT/"media"/row["media"]),"-t",str(row["end"]-row["start"]),"-filter_complex",filters,"-map","[out]","-map",audio_map,"-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-movflags","+faststart",str(tmp)])
     tmp.replace(out)
     if not final:
         db.execute("INSERT OR REPLACE INTO preview_cache VALUES(?,?,0)", (cid,time.time()+RETENTION))
