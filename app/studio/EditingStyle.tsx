@@ -1,10 +1,11 @@
 'use client';
 import {Info} from 'lucide-react';
 import {useState} from 'react';
-export const defaults={captions:'generate',facecam:'off',font:'DejaVu Sans',animation:'off'};
+export const defaults={format:'vertical',captions:'generate',facecam:'off',font:'DejaVu Sans',animation:'off'};
 export function EditingStyle({value,onChange}:{value:typeof defaults;onChange:(v:typeof defaults)=>void}){
   const [expanded,expand]=useState(false);
   const notes:Record<string, Record<string,string>>={
+    format:{vertical:'Preenche o quadro vertical com o centro do vídeo. A exportação tem 1080 × 1920 pixels.',horizontal:'Preenche o quadro horizontal com o centro do vídeo. A exportação tem 1920 × 1080 pixels.'},
     captions:{
       generate:'Grava a transcrição da fala na imagem com a fonte escolhida. Use em vídeos sem legenda embutida para evitar texto sobreposto.',
       preserve:'Mantém as legendas embutidas que ficam dentro do recorte vertical.',
@@ -22,6 +23,7 @@ export function EditingStyle({value,onChange}:{value:typeof defaults;onChange:(v
     }
   };
   const choices=[
+    ['format','Formato do vídeo',[['vertical','Vertical · 9:16'],['horizontal','Horizontal · 16:9']]],
     ['captions','Legendas',[['generate','Gerar legendas'],['preserve','Preservar originais'],['auto','Detectar no vídeo'],['off','Desativado']]],
     ['facecam','Facecam',[['off','Desativada'],['always','Corte inteiro'],['peaks','Picos de volume']]],
     ['animation','Animação de texto',[['off','Estática'],['fade','Entrada suave']]]

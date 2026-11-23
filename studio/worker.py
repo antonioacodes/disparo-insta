@@ -71,7 +71,7 @@ def command(args):
 
 def project(media, title, preset='{}', remote=False):
     settings = json.loads(preset)
-    allowed = {'captions':['generate','preserve','auto','off'],'facecam':['off','always','peaks'],'font':["DejaVu Sans","Montserrat","Anton","Bebas Neue","Oswald","Poppins","Roboto Condensed","Barlow Condensed","Archivo Black","DM Sans","Space Grotesk","DejaVu Serif","Liberation Mono"],'animation':['off','fade']}
+    allowed = {'format':['vertical','horizontal'],'captions':['generate','preserve','auto','off'],'facecam':['off','always','peaks'],'font':["DejaVu Sans","Montserrat","Anton","Bebas Neue","Oswald","Poppins","Roboto Condensed","Barlow Condensed","Archivo Black","DM Sans","Space Grotesk","DejaVu Serif","Liberation Mono"],'animation':['off','fade']}
     if not isinstance(settings,dict) or any(k not in allowed or v not in allowed[k] for k,v in settings.items()):
         raise ValueError('Padrão inválido')
     key = uuid.uuid4().hex
@@ -161,13 +161,13 @@ def analyze(key):
         enqueue("preview",cid)
     db.commit()
 
-def animated_subtitles(path, cues):
+def animated_subtitles(path, cues, horizontal=False):
     def stamp(seconds):
         ticks = round(seconds * 100)
         return f"{ticks//360000}:{ticks//6000%60:02}:{ticks//100%60:02}.{ticks%100:02}"
 
     lines = [
-        "[Script Info]", "ScriptType: v4.00+", "PlayResX: 216", "PlayResY: 384",
+        "[Script Info]", "ScriptType: v4.00+", f"PlayResX: {384 if horizontal else 216}", f"PlayResY: {216 if horizontal else 384}",
         "[V4+ Styles]",
         "Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding",
         "Style: Default,Arial,14,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,1,0,2,10,10,22,1",
@@ -192,11 +192,14 @@ def render(cid, final):
     def stamp(t):
         ms = round(max(0,t)*1000)
         return f"{ms//3600000:02}:{ms//60000%60:02}:{ms//1000%60:02},{ms%1000:03}"
-    w,h = (1080,1920) if final else (360,640)
     out = folder / (cid+("-final.mp4" if final else "-preview.mp4"))
     tmp = out.with_suffix(".partial.mp4")
     record = db.execute("SELECT settings FROM presets WHERE project=?", (row["project"],)).fetchone()
     settings = json.loads(record[0]) if record else {}
+    horizontal = settings.get("format") == "horizontal"
+    w,h = (1080,1920) if final else (360,640)
+    if horizontal:
+        w,h = h,w
     face = settings.get("facecam","off")
     crop = f"crop={w}:{h}"
     if face=="off" and os.getenv("STUDIO_FRAMING") == "mouth_motion":
@@ -216,7 +219,7 @@ def render(cid, final):
             a,b = max(row["start"],seg["start"]),min(row["end"],seg["end"])
             if b<=a:
                 continue
-            spans = missing_caption_spans(source,a,b) if mode=="auto" else [(a,b)]
+            spans = missing_caption_spans(source,a,b,horizontal) if mode=="auto" else [(a,b)]
             for left,right in spans:
                 cues.append((left-row["start"],right-row["start"],seg["text"].strip()))
                 blocks.append(f"{len(blocks)+1}\n{stamp(left-row['start'])} --> {stamp(right-row['start'])}\n{seg['text'].strip()}\n")
@@ -239,7 +242,7 @@ def render(cid, final):
     if burn and settings.get("animation")=="fade":
         progress(kind,cid,"Preparando a animação das legendas")
         subtitle = subtitle.with_suffix(".ass")
-        animated_subtitles(subtitle,cues)
+        animated_subtitles(subtitle,cues,horizontal)
     filters += f"[{layer}]"+(f"subtitles={subtitle}:force_style='FontName={font},Bold=1,FontSize=14,MarginV=22'" if burn else "null")+"[out]"
     progress(kind,cid,"Gerando o vídeo final" if final else "Gerando a prévia")
     command(["ffmpeg","-loglevel","error","-y","-ss",str(row["start"]),"-i",str(ROOT/"media"/row["media"]),"-t",str(row["end"]-row["start"]),"-filter_complex",filters,"-map","[out]","-map","0:a:0?","-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-movflags","+faststart",str(tmp)])

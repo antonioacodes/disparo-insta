@@ -8,14 +8,15 @@ import subprocess
 def run(args, data=None):
     return subprocess.run(args,input=data,stdout=subprocess.PIPE,stderr=subprocess.PIPE,check=True,timeout=180).stdout
 
-def missing_caption_spans(source,start,end):
+def missing_caption_spans(source,start,end,horizontal=False):
+    ratio = "16/9" if horizontal else "9/16"
     if not shutil.which("tesseract"):
         raise ValueError("Detecção automática exige Tesseract. Instale tesseract-ocr ou escolha preservar as legendas.")
     spans = []
     left = start
     while left < end:
         right = min(end,left+.5)
-        frame = run(["ffmpeg","-loglevel","error","-ss",str((left+right)/2),"-i",str(source),"-frames:v","1","-vf","crop=min(iw\\,ih*9/16):ih,crop=iw:ih*0.38:0:ih*0.60,scale=640:-2","-f","image2pipe","-c:v","png","-"])
+        frame = run(["ffmpeg","-loglevel","error","-ss",str((left+right)/2),"-i",str(source),"-frames:v","1","-vf",f"crop=min(iw\\,ih*{ratio}):min(ih\\,iw/({ratio})),crop=iw:ih*0.38:0:ih*0.60,scale=640:-2","-f","image2pipe","-c:v","png","-"])
         words = run(["tesseract","stdin","stdout","--psm","6"],frame).decode(errors="replace")
         if len(re.findall(r"\b[^\W\d_]{2,}\b", words)) < 2:
             if spans and spans[-1][1] == left:
