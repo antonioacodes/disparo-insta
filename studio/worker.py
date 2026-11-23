@@ -527,10 +527,10 @@ if __name__ == "__main__":
         db.execute("BEGIN")
         result = snapshot(db, WORK, online)
         result["audienceStatus"] = audience_status() if online else "offline"
-        active=db.execute("SELECT query,state FROM trend_reports WHERE state NOT IN ('Concluída','Erro') ORDER BY id LIMIT 1").fetchone()
+        active=db.execute("SELECT * FROM trend_reports WHERE state NOT IN ('Concluída','Erro') ORDER BY id LIMIT 1").fetchone()
         cfg=trends.settings()
         result['trendStatus']=('Processador offline' if not online else ('Esperando' if active['state'] in ('Esperando','Na fila') else 'Trabalhando') if active else 'Ocioso' if cfg['STUDIO_TRENDS_MODEL'] and any(trends.sources(cfg).values()) else 'Ainda não configurado')
-        result['trendTask']=dict(active) if active else None
+        result['trendTask']=dict(query=active["query"],state=active["state"],progress=trends.progress(db,active)) if active and online else None
         print(json.dumps(result))
     elif opts.action == "history":
         project_id, = opts.args

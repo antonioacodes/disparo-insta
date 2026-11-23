@@ -1,11 +1,12 @@
 'use client';
 import {useEffect,useState} from 'react';
+import {TrendProgress,type ResearchProgress} from './TrendProgress';
 import {ActionCard} from './Department';
 import styles from './office.module.css';
 
 type Platform='YouTube'|'Twitch';
 type Item={title:string;creator:string;url:string|null;views?:string;category?:string};
-type Report={id:number;query:string;state:string;created:number;platform:Platform;country:string;days:number;analysis:string|null;error:string|null;items:Item[]};
+type Report={progress?:ResearchProgress;id:number;query:string;state:string;created:number;platform:Platform;country:string;days:number;analysis:string|null;error:string|null;items:Item[]};
 type Data={reports:Report[];sources:Record<Platform,boolean>;model:boolean};
 export function Trends(){
   const [data,setData]=useState<Data|null>(null),[screen,go]=useState<'home'|'search'|'reports'>('home');
@@ -40,7 +41,9 @@ export function Trends(){
     finally{setBusy(false)}
   }
   const report=data?.reports.find(r=>r.id===selected);
+  const active=data?.reports.slice().reverse().find(r=>!['Concluída','Erro'].includes(r.state));
   return <section className={styles.trends}>
+    {screen==='home'&&active&&<article><strong>{active.query}</strong><TrendProgress progress={active.progress}/><button onClick={()=>{select(active.id);go('reports')}}>Acompanhar pesquisa</button></article>}
     {offline&&<p role="alert">Falha ao atualizar as pesquisas. Tentando reconectar…</p>}
     {screen!=='home'&&<button onClick={()=>{go('home');setError('')}}>← Tendências</button>}
     {screen==='home'&&<div className={styles.actions}>
@@ -61,6 +64,7 @@ export function Trends(){
     {screen==='reports'&&<><h3>Relatórios</h3>{selected===null?<div>{!data?'Carregando…':data.reports.length===0?'Nenhuma pesquisa registrada.':data.reports.map(r=><button key={r.id} onClick={()=>select(r.id)}>{r.query} · {r.platform} · {r.state}</button>)}</div>:
       <><button onClick={()=>select(null)}>← Todos os relatórios</button>{!report?<p>Carregando relatório…</p>:<article>
         <h3>{report.query}</h3><p>{report.platform} · {new Date(report.created*1000).toLocaleDateString('pt-BR')} · {report.state==='Esperando'?'Aguardando liberação do processamento do Studio':report.state}</p>
+        <TrendProgress progress={report.progress}/>
         {report.error&&<p role="alert">{report.error}</p>}
         {report.analysis&&<p>{report.analysis}</p>}
         {report.state==='Concluída'&&!report.items.length&&<p>Nenhum resultado para estes filtros.</p>}

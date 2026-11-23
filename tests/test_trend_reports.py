@@ -1,3 +1,4 @@
+from io import BytesIO
 import sqlite3
 import unittest
 from unittest.mock import patch
@@ -24,10 +25,11 @@ class Reports(unittest.TestCase):
             partial, = trends.recent(self.db)
             self.assertEqual((partial['state'],partial['items']), ('Analisando',items))
             self.assertEqual(trends.submit(self.db,'jogos','BR',7,'YouTube'),ident)
-            with patch.object(trends,'request',return_value={'response':'Resumo'}):
+            with patch('urllib.request.urlopen',return_value=BytesIO(b'{"response":"Resumo","done":false}\n{"done":true}\n')):
                 trends.process(self.db,ident)
             collect.assert_called_once()
         self.assertEqual(trends.recent(self.db)[0]['analysis'],'Resumo')
+        self.assertEqual(trends.recent(self.db)[0]['progress']['stage'],3)
         self.assertEqual(trends.submit(self.db,'Jogos','BR',7,'YouTube'),ident)
 
     def test_empty_search_finishes_without_inference(self):
