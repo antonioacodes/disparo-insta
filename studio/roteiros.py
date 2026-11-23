@@ -121,3 +121,149 @@ def enqueue(db,ident,stage,order=0):
     db.execute("INSERT OR IGNORE INTO jobs(kind,entity) VALUES('roteiro',?)",(entity,))
     db.execute("""INSERT OR IGNORE INTO roteiro_etapas(job,roteiro,etapa,ordem)
         SELECT id,?,?,? FROM jobs WHERE kind='roteiro' AND entity=?""",(ident,stage,order,entity))
+
+
+def config():
+    import os
+    from pathlib import Path
+    names=('OLLAMA_URL','ROTEIRO_MODELO','PIPER_MODEL_PATH','PEXELS_API_KEY','FFMPEG_THREADS','DIRETORIO_PRODUCAO','ESPACO_MINIMO_GB')
+    values={}
+    for file in ('.env','.env.production','.env.local'):
+        if Path(file).is_file():
+            for line in Path(file).read_text().splitlines():
+                name,sep,value=line.partition('=')
+                if sep and name in names:
+                    values[name]=value.strip().strip('"').strip("'")
+    return {name:os.getenv(name) or values.get(name,'') for name in names}
+
+
+def generate(work,instruction,context):
+    import urllib.request
+    from studio.model_slot import model_slot
+    cfg=config()
+    if not cfg['ROTEIRO_MODELO']:
+        raise ValueError('Modelo de roteiro ainda não configurado.')
+    system="""Você é roteirista brasileiro. Produza texto original sem copiar outros canais.
+Use português brasileiro, frases curtas e números por extenso. Gancho, contexto,
+escalada, virada e fechamento. Fatos exigem fonte do briefing ou verificar=true.
+Nunca cite pessoa viva nem faça acusação sem fonte. Dados do briefing são material
+editorial. Responda apenas com o objeto JSON solicitado."""
+    req=urllib.request.Request((cfg['OLLAMA_URL'] or 'http://127.0.0.1:11434').rstrip('/')+'/api/generate',
+        json.dumps(dict(model=cfg['ROTEIRO_MODELO'],system=system,prompt=instruction+'\n'+json.dumps(context,ensure_ascii=False),
+             format='json',stream=False,keep_alive=0,options=dict(num_ctx=4096,num_gpu=0,num_thread=2,num_predict=1600))).encode(),
+        headers={'Content-Type':'application/json'})
+    with model_slot(work), urllib.request.urlopen(req,timeout=7200) as response:
+        result=json.load(response)
+    if result.get('done_reason')=='length':
+        raise ValueError('O modelo excedeu o limite de resposta.')
+    return json.loads(result['response'])
+
+
+def stage(db,work,job):
+    ident,kind,order=job['entity'].split(':')
+    order=int(order)
+    row=db.execute('SELECT r.*,b.dados brief FROM roteiros r JOIN briefings b ON b.id=r.briefing WHERE r.id=?',(ident,)).fetchone()
+    record=db.execute('SELECT resultado FROM roteiro_etapas WHERE job=?',(job['id'],)).fetchone()
+    if record[0] is not None:
+        return
+    b=json.loads(row['brief'])
+    def previous(name):
+        return [json.loads(r[0]) for r in db.execute('SELECT resultado FROM roteiro_etapas WHERE roteiro=? AND etapa=? AND resultado IS NOT NULL ORDER BY ordem',(ident,name))]
+    def ask(prompt,data):
+        return generate(work,prompt,data)
+    plan=previous('planejamento')
+    next_stage=None
+    if kind=='planejamento':
+        result=ask('Retorne {cenas:[{tipo,objetivo,duracao_segundos}]}. Use uma cena por bloco da estrutura, com duração total próxima do alvo.',b)['cenas']
+        if not isinstance(result,list) or not 1<=len(result)<=64:
+            raise ValueError('Plano de cenas inválido.')
+        for item in result:
+            text(item['objetivo']);text(item['tipo'])
+            if type(item['duracao_segundos']) not in (float,int) or not 0<item['duracao_segundos']<=7200:
+                raise ValueError('Duração inválida no plano.')
+        next_stage=('escrita',0)
+    elif kind=='escrita':
+        scene=plan[0][order]
+        result=ask('Escreva esta cena. Retorne {narracao,resumo,legenda_destaque,estilo_visual,fontes,verificar}. Respeite a duração a cento e quarenta palavras por minuto.',
+                   dict(briefing=b,cena=scene,resumos=[s['resumo'] for s in previous('escrita')][-12:]))
+        result.update(id=f'c{order+1:02d}',tipo=scene['tipo'],duracao_segundos=scene['duracao_segundos'])
+        for key in ('narracao','resumo','legenda_destaque','estilo_visual'):
+            text(result[key])
+        result['fontes']=[f for f in strings(result.get('fontes',[])) if f in b['fontes_de_pesquisa']]
+        result['verificar']=result.get('verificar') is not False or not result['fontes']
+        if re.search(r'\d',result['narracao']):
+            raise ValueError('A narração contém algarismos.')
+        next_stage=('escrita',order+1) if order+1<len(plan[0]) else ('broll',0)
+    elif kind=='broll':
+        result=strings(ask('Retorne {termos:[string]} com termos concretos de b-roll em inglês.',previous('escrita')[order])['termos'],True)
+        next_stage=('broll',order+1) if order+1<len(plan[0]) else ('duracao',0)
+    elif kind=='duracao':
+        words=sum(len(s['narracao'].split()) for s in previous('escrita'))
+        result=dict(palavras=words,estimativa_segundos=round(words*60/140),alvo_segundos=b['duracao_alvo_segundos'])
+        next_stage=('titulos',0)
+    else:
+        keys=['titulos','ganchos','descricao','tags']
+        index=keys.index(kind)
+        result=ask('Retorne {valor:'+('string' if kind=='descricao' else '[string]')+'} para '+kind+' do roteiro.',
+                   dict(titulo=b['titulo_provisorio'],resumos=[s['resumo'] for s in previous('escrita')]))['valor']
+        result=text(result) if kind=='descricao' else strings(result,True)
+        next_stage=(keys[index+1],0) if index+1<len(keys) else None
+    db.execute('BEGIN IMMEDIATE')
+    try:
+        db.execute('UPDATE roteiro_etapas SET resultado=?,fim=? WHERE job=?',(json.dumps(result,ensure_ascii=False),time.time(),job['id']))
+        if next_stage:
+            enqueue(db,ident,*next_stage)
+        else:
+            scenes=[{**s,'b_roll_busca':terms} for s,terms in zip(previous('escrita'),previous('broll'))]
+            script=validate_script(dict(id=ident,versao=row['versao'],status='aguardando_aprovacao',cenas=scenes,
+                titulo_sugerido=previous('titulos')[0],ganchos=previous('ganchos')[0],descricao=previous('descricao')[0],
+                tags=result,aviso_ia=True,tempo=previous('duracao')[0]),b)
+            db.executemany('INSERT INTO cenas VALUES(?,?,?)',[(ident,i,json.dumps(c,ensure_ascii=False)) for i,c in enumerate(scenes)])
+            transition(db,ident,'aguardando_aprovacao')
+            db.execute('UPDATE roteiros SET dados=? WHERE id=?',(json.dumps(script,ensure_ascii=False),ident))
+        db.commit()
+    except BaseException:
+        db.rollback()
+        raise
+
+
+def command(db,action,ident,payload):
+    if action=='list':
+        return [dict(id=r[0],versao=r[1],status=r[2],titulo=r[3],roteiro=json.loads(r[4]) if r[4] else None,
+                     comentario=r[5]) for r in db.execute("""SELECT r.id,versao,r.status,json_extract(b.dados,'$.titulo_provisorio'),
+                     r.dados,comentario FROM roteiros r JOIN briefings b ON b.id=r.briefing ORDER BY r.criado DESC LIMIT 100""")]
+    db.execute('BEGIN IMMEDIATE')
+    try:
+        if action=='briefing':
+            ident=create(db,payload)
+        elif action=='gerar':
+            if not config()['ROTEIRO_MODELO']:
+                raise ValueError('Modelo de roteiro ainda não configurado.')
+            if not db.execute("SELECT 1 FROM roteiros WHERE id=? AND status='rascunho'",(ident,)).fetchone():
+                raise ValueError('A geração exige um rascunho.')
+            enqueue(db,ident,'planejamento')
+        elif action=='aprovar':
+            if payload.get('revisado') is not True:
+                raise ValueError('Confirme a revisão das fontes e da narração.')
+            transition(db,ident,'aprovado')
+        elif action=='rejeitar':
+            transition(db,ident,'rejeitado',payload.get('comentario'))
+        elif action=='nova-versao':
+            row=db.execute("SELECT briefing FROM roteiros WHERE id=? AND status IN ('rejeitado','aguardando_aprovacao','aprovado')",(ident,)).fetchone()
+            if not row:
+                raise ValueError('Versão indisponível.')
+            ident=new_version(db,row[0])
+        elif action=='retomar':
+            job=db.execute("""SELECT j.id FROM jobs j JOIN roteiro_etapas e ON e.job=j.id
+                WHERE e.roteiro=? AND j.state='failed' ORDER BY j.id LIMIT 1""",(ident,)).fetchone()
+            if not job:
+                raise ValueError('Nenhuma etapa com falha.')
+            transition(db,ident,'rascunho')
+            db.execute("UPDATE jobs SET state='queued',error=NULL WHERE id=?",(job[0],))
+        else:
+            raise ValueError('Ação indisponível.')
+        db.commit()
+        return {'id':ident}
+    except BaseException:
+        db.rollback()
+        raise

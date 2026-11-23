@@ -14,7 +14,7 @@ import urllib.request
 from pathlib import Path
 
 from studio.delete_project import delete_project
-from studio import trends
+from studio import trends, roteiros
 from studio.model_slot import model_slot
 from studio.background import EditingPending, run_background
 from studio.cache import maintain, remove_preview, RETENTION
@@ -445,6 +445,24 @@ def heartbeat():
         time.sleep(10)
 
 
+def run_script_stage(job,etapa):
+    import threading
+    stop=threading.Event()
+    def signal():
+        with sqlite3.connect(WORK/"studio.sqlite",isolation_level=None,timeout=20) as conn:
+            while not stop.wait(30):
+                conn.execute("INSERT INTO agentes_eventos(agente,job,evento,instante) VALUES('Roteiros',?,'heartbeat',?)",(job['id'],time.time()))
+    db.execute("UPDATE roteiro_etapas SET inicio=? WHERE job=?",(time.time(),job['id']))
+    db.execute("INSERT INTO agentes_eventos(agente,job,evento,instante) VALUES('Roteiros',?,?,?)",(job['id'],etapa,time.time()))
+    beat=threading.Thread(target=signal,daemon=True)
+    beat.start()
+    try:
+        roteiros.stage(db,WORK,job)
+    finally:
+        stop.set()
+        beat.join()
+
+
 def worker():
     import fcntl
     with (WORK/"worker.lock").open("a") as lock:
@@ -476,7 +494,11 @@ def worker():
                     continue
                 db.execute("DELETE FROM job_progress WHERE job=?", (job["id"],))
                 try:
-                    if job["kind"] == "purge":
+                    if job["kind"] == "roteiro":
+                        etapa=job["entity"].split(":")[1]
+                        progress("roteiro",job["entity"],etapa.capitalize())
+                        run_script_stage(job,etapa)
+                    elif job["kind"] == "purge":
                         delete_project(db, WORK, job["entity"])
                     elif job["kind"] == "import":
                         progress("import",job["entity"],"Importando o vídeo por link")
@@ -503,15 +525,23 @@ def worker():
                     db.execute("UPDATE jobs SET state='done' WHERE id=?", (job["id"],))
                 except Exception as exc:
                     db.rollback()
+                    if job['kind']=='roteiro':
+                        db.execute("UPDATE roteiros SET status='erro',comentario=? WHERE id=?",(str(exc)[:500],job['entity'].split(':')[0]))
                     db.execute("UPDATE jobs SET state='failed',error=? WHERE id=?", (str(exc)[-500:],job["id"]))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=["trend-manage","trend-step","trend-submit","trend-list","work","office","score-audience","create","list","approve","reject","revise","captions","audience","delete-project","import","history"])
+    parser.add_argument("action", choices=["roteiros","trend-manage","trend-step","trend-submit","trend-list","work","office","score-audience","create","list","approve","reject","revise","captions","audience","delete-project","import","history"])
     parser.add_argument("args", nargs="*")
     opts = parser.parse_args()
     trends.init(db)
-    if opts.action == "trend-manage":
+    roteiros.init(db)
+    if opts.action == "roteiros":
+        try:
+            print(json.dumps(roteiros.command(db,opts.args[0],opts.args[1],json.loads(sys.stdin.read() or '{}'))))
+        except (ValueError,KeyError,TypeError) as exc:
+            print(json.dumps({"error":str(exc)}))
+    elif opts.action == "trend-manage":
         print(json.dumps(trends.manage(db,int(opts.args[0]),opts.args[1])))
     elif opts.action == "trend-step":
         trends.process(db,int(opts.args[0]))
