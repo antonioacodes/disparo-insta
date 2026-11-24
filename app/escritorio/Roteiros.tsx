@@ -2,7 +2,7 @@ import {useEffect,useState} from 'react';
 import styles from './office.module.css';
 
 type Scene={id:string;tipo:string;legenda_destaque:string;narracao:string;verificar:boolean;fontes:string[]};
-type Item={id:string;versao:number;titulo:string;status:string;comentario:string|null;producao:{publico?:{rodada:number;nota:number;cenas:{problema:string;ajuste:string;notas:Record<string,number>}[]}[];etapa:string;erro:string|null;chamadas:number;pronto:boolean;legendas:{cena:number;srt:string;segundos:number}[];etapas:{etapa:string;cena:number;inicio:number|null;fim:number|null}[];assets:{origem:string;autor:string;url:string}[]}|null;roteiro:{cenas:Scene[]}|null};
+type Item={aprovacao_automatica:boolean;id:string;versao:number;titulo:string;status:string;comentario:string|null;producao:{publico?:{rodada:number;nota:number;cenas:{problema:string;ajuste:string;notas:Record<string,number>}[]}[];etapa:string;erro:string|null;chamadas:number;pronto:boolean;legendas:{cena:number;srt:string;segundos:number}[];etapas:{etapa:string;cena:number;inicio:number|null;fim:number|null}[];assets:{origem:string;autor:string;url:string}[]}|null;roteiro:{cenas:Scene[]}|null};
 const endpoint='/api/studio/workflow';
 export function Roteiros({publicacoes=false}:{publicacoes?:boolean}){
   const [rows,setRows]=useState<Item[]>([]),[selected,setSelected]=useState(''),[creating,setCreating]=useState(false);
@@ -25,7 +25,7 @@ export function Roteiros({publicacoes=false}:{publicacoes?:boolean}){
     {error&&<p role="alert">{error}</p>}
     {creating?<form onSubmit={e=>{e.preventDefault();const form=new FormData(e.currentTarget);
       const lines=(key:string)=>String(form.get(key)||'').split('\n').map(s=>s.trim()).filter(Boolean);
-      void act('briefing',{...Object.fromEntries(form),duracao_alvo_segundos:Number(form.get('duracao_alvo_segundos')),estrutura:['gancho','contexto','escalada','virada','fechamento'],restricoes:lines('restricoes'),fontes_de_pesquisa:lines('fontes_de_pesquisa')})}}>
+      void act('briefing',{...Object.fromEntries(form),aprovacao_automatica:form.get('aprovacao_automatica')==='on',duracao_alvo_segundos:Number(form.get('duracao_alvo_segundos')),estrutura:['gancho','contexto','escalada','virada','fechamento'],restricoes:lines('restricoes'),fontes_de_pesquisa:lines('fontes_de_pesquisa')})}}>
       <h3>Novo briefing</h3>
       <label>Ideia ou título provisório<input name="titulo_provisorio" required maxLength={600} placeholder="Ex.: por que sentimos que alguém está nos observando?"/></label>
       <small>Escolha uma dúvida, uma história ou uma descoberta. No Caio, pesquise o assunto e use os resultados recentes para encontrar um recorte. Descreva aqui o que o vídeo deve contar.</small>
@@ -41,9 +41,10 @@ export function Roteiros({publicacoes=false}:{publicacoes?:boolean}){
       <label>Formato<select name="formato"><option value="shorts">Shorts · vertical</option><option value="longo">Longo · horizontal</option></select></label>
       <label>Duração em segundos<input type="number" name="duracao_alvo_segundos" min="1" max="7200" required defaultValue="60"/></label>
       <label>Fontes de pesquisa, uma por linha<textarea name="fontes_de_pesquisa" placeholder="Cole links de fontes confiáveis que sustentem os fatos do vídeo."/></label><label>Restrições<textarea name="restricoes"/></label>
+      <label><input type="checkbox" name="aprovacao_automatica"/> Aprovar roteiro automaticamente</label><small>Ao salvar, Bia gera e revisa o roteiro e Lia produz o vídeo com narração, cenas e legendas. As revisões do Gemini e o teste de público continuam ativos. O vídeo final aguarda sua aprovação; nada é publicado automaticamente. Você pode criar vários briefings para processamento em fila.</small>
       <button disabled={busy}>Salvar briefing</button><button type="button" onClick={()=>setCreating(false)}>Voltar</button>
     </form>:item?<><button onClick={()=>{setSelected('');setReviewed(false)}}>← Todos os roteiros</button><h3>{item.titulo}</h3><small>Versão {item.versao} · {item.status.replaceAll('_',' ')}</small>
-      {item.comentario&&<p>{item.comentario}</p>}{item.roteiro?.cenas.map(c=><article key={c.id}><strong>{c.tipo}</strong><p>{c.narracao}</p><small>{c.verificar?'Requer verificação. ':''}{c.fontes.join(' · ')}</small></article>)}
+      {item.aprovacao_automatica&&<p>Produção automática · aprovação final manual</p>}{item.comentario&&<p>{item.comentario}</p>}{item.roteiro?.cenas.map(c=><article key={c.id}><strong>{c.tipo}</strong><p>{c.narracao}</p><small>{c.verificar?'Requer verificação. ':''}{c.fontes.join(' · ')}</small></article>)}
       {item.status==='rascunho'&&<button disabled={busy} onClick={()=>act('gerar')}>Gerar roteiro</button>}
       {item.status==='erro'&&<button disabled={busy} onClick={()=>act('retomar')}>Reprocessar etapa</button>}
       {item.status==='aguardando_aprovacao'&&<><label><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/> Revisei a narração, as fontes e os trechos sinalizados.</label>

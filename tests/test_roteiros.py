@@ -95,8 +95,22 @@ class RoteirosTest(unittest.TestCase):
     def test_five_failed_assessments_discard(self):
         self.run_production([79]*5)
 
-    def run_production(self,grades):
+    def test_automatic_brief_starts_generation(self):
+        with patch.object(roteiros,'config',return_value={'ROTEIRO_MODELO':'test'}):
+            result=roteiros.command(self.db,'briefing','',dict(self.brief,aprovacao_automatica=True))
+        self.assertEqual(self.db.execute('SELECT entity FROM jobs').fetchone()[0],result['id']+':planejamento:0')
+        self.assertFalse(roteiros.validate_brief(self.brief)['aprovacao_automatica'])
+        with self.assertRaises(ValueError):
+            roteiros.validate_brief(dict(self.brief,aprovacao_automatica='false'))
+
+    def test_automatic_pipeline_still_waits_for_final_review(self):
+        self.run_production([80,80],auto=True)
+
+    def run_production(self,grades,auto=False):
         import wave
+        if auto:
+            import json
+            self.db.execute('UPDATE briefings SET dados=?',(json.dumps(dict(self.brief,aprovacao_automatica=True)),))
         responses=[
             {'cenas':[{'tipo':'gancho','objetivo':'encontrar o objeto','duracao_segundos':3}]},
             {'narracao':'O guarda-chuva ficou aqui.', 'resumo':'O encontro.',
@@ -113,14 +127,18 @@ class RoteirosTest(unittest.TestCase):
         def finish(job):
             self.db.execute("UPDATE jobs SET state='done' WHERE id=?",(job['id'],))
 
-        with patch.object(roteiros,'generate',side_effect=responses) as model:
+        with patch.object(producao,'check_space'), patch.object(roteiros,'generate',side_effect=responses) as model:
             roteiros.enqueue(self.db,self.ident,'planejamento')
             while job:=next_job():
+                if job['kind']!='roteiro':
+                    self.db.execute("UPDATE jobs SET state='queued' WHERE id=?",(job['id'],))
+                    break
                 roteiros.stage(self.db,self.folder,job)
                 finish(job)
             self.assertEqual(model.call_count,len(responses))
-        self.assertEqual(roteiros.command(self.db,'list','',{})[0]['status'],'aguardando_aprovacao')
-        roteiros.command(self.db,'aprovar',self.ident,{'revisado':True})
+        self.assertEqual(roteiros.command(self.db,'list','',{})[0]['status'],'em_producao' if auto else 'aguardando_aprovacao')
+        if not auto:
+            roteiros.command(self.db,'aprovar',self.ident,{'revisado':True})
         voice=self.folder/'voice.onnx'
         voice.touch()
         def piper(args,**options):
@@ -134,7 +152,8 @@ class RoteirosTest(unittest.TestCase):
              'PIPER_MODEL_PATH':str(voice),'AMBIENCIA':'off'}
         reports=[[dict(notas={k:grade for k in producao.audience.DIMENSIONS},problema='Teste',ajuste='Teste')] for grade in grades]
         with patch.object(producao.audience,'revise',side_effect=lambda work,scene,*args:{**scene,'narracao':scene['narracao']+' Sim.'}), patch.object(producao.audience,'assess',side_effect=reports), patch.object(producao,'config',return_value=cfg), patch.object(producao,'visual',return_value=None) as broll, patch.object(producao.subprocess,'run',side_effect=piper) as narration, patch.object(producao,'ffmpeg',side_effect=render):
-            roteiros.command(self.db,'produzir',self.ident,{})
+            if not auto:
+                roteiros.command(self.db,'produzir',self.ident,{})
             while job:=next_job():
                 producao.process(self.db,self.folder,job)
                 finish(job)
@@ -146,6 +165,7 @@ class RoteirosTest(unittest.TestCase):
                 self.assertEqual(roteiros.command(self.db,'list','',{})[0]['status'],'descartado')
                 return
             self.assertTrue(report['pronto'])
+            self.assertEqual(roteiros.command(self.db,'list','',{})[0]['status'],'aguardando_revisao_video')
             self.assertIn('00:00:03,000',report['legendas'][0]['srt'])
             roteiros.command(self.db,'regenerar',self.ident,dict(cena=0,parte='legendas',comentario='Revisão'))
             stages=[]

@@ -55,11 +55,14 @@ def strings(values,required=False):
 def validate_brief(b):
     if not isinstance(b,dict) or b.get('formato') not in ('shorts','longo'):
         raise ValueError('Formato inválido.')
+    if type(b.get('aprovacao_automatica',False)) is not bool:
+        raise ValueError('Aprovação automática deve ser verdadeiro ou falso.')
     seconds=b.get('duracao_alvo_segundos')
     if type(seconds) is not int or not 1<=seconds<=7200:
         raise ValueError('Duração inválida.')
     return {**{k:(text(b.get(k),600) if k=='titulo_provisorio' or b.get(k) else '') for k in ('titulo_provisorio','nicho','tom','publico')},
             'formato':b['formato'],'duracao_alvo_segundos':seconds,
+            'aprovacao_automatica':b.get('aprovacao_automatica',False),
             'estrutura':strings(b.get('estrutura'),True),'restricoes':strings(b.get('restricoes')),
             'fontes_de_pesquisa':strings(b.get('fontes_de_pesquisa'))}
 
@@ -116,7 +119,12 @@ def create(db,values):
     brief=validate_brief(values)
     ident=uuid.uuid4().hex
     db.execute('INSERT INTO briefings VALUES(?,?,?)',(ident,json.dumps(brief,ensure_ascii=False),time.time()))
-    return new_version(db,ident)
+    roteiro=new_version(db,ident)
+    if brief['aprovacao_automatica']:
+        if not config()['ROTEIRO_MODELO']:
+            raise ValueError('Modelo de roteiro ainda não configurado.')
+        enqueue(db,roteiro,'planejamento')
+    return roteiro
 
 
 def enqueue(db,ident,stage,order=0):
@@ -260,6 +268,11 @@ def stage(db,work,job):
             db.executemany('INSERT INTO cenas VALUES(?,?,?)',[(ident,i,json.dumps(c,ensure_ascii=False)) for i,c in enumerate(scenes)])
             transition(db,ident,'aguardando_aprovacao')
             db.execute('UPDATE roteiros SET dados=? WHERE id=?',(json.dumps(script,ensure_ascii=False),ident))
+            if b.get('aprovacao_automatica'):
+                from studio.producao import begin
+                transition(db,ident,'aprovado','Aprovação automática autorizada no briefing.')
+                begin(db,ident)
+                db.execute("UPDATE roteiros SET comentario=? WHERE id=?",('Produção automática autorizada no briefing. Vídeo final aguarda sua revisão.',ident))
         db.commit()
     except BaseException:
         db.rollback()
@@ -273,8 +286,8 @@ def command(db,action,ident,payload):
         return {'arquivo':row[0] if row else None}
     if action=='list':
         return [dict(id=r[0],versao=r[1],status=r[2],titulo=r[3],roteiro=json.loads(r[4]) if r[4] else None,
-                     comentario=r[5],producao=producao.review(db,r[0])) for r in db.execute("""SELECT r.id,versao,r.status,json_extract(b.dados,'$.titulo_provisorio'),
-                     r.dados,comentario FROM roteiros r JOIN briefings b ON b.id=r.briefing ORDER BY r.criado DESC LIMIT 100""")]
+                     comentario=r[5],aprovacao_automatica=bool(r[6]),producao=producao.review(db,r[0])) for r in db.execute("""SELECT r.id,versao,r.status,json_extract(b.dados,'$.titulo_provisorio'),
+                     r.dados,comentario,json_extract(b.dados,'$.aprovacao_automatica') FROM roteiros r JOIN briefings b ON b.id=r.briefing ORDER BY r.criado DESC LIMIT 100""")]
     db.execute('BEGIN IMMEDIATE')
     try:
         if action=='briefing':

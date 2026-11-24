@@ -83,3 +83,18 @@ GEMINI_MODEL=gemini-2.5-flash
 ```
 
 Separe chaves por vírgula, na ordem de preferência. O serviço tenta a próxima se a credencial for inválida. Em caso de cota esgotada ou indisponibilidade, a revisão fica pendente de retomada. Sem chave, continua o fluxo local. Ao configurar, os novos roteiros, relatórios com análise, prévias e vídeos renderizados são enviados ao Google para revisão. O MP4 é enviado com áudio e o serviço solicita a exclusão da cópia remota após o parecer. A revisão editorial humana continua necessária para a publicação.
+
+### Briefings com produção automática
+
+No formulário da Bia, `Aprovar roteiro automaticamente` vem desmarcado. Quando
+marcado, salvar o briefing inicia a geração e, após as revisões do roteiro,
+encaminha a produção para a fila existente. Não pula a revisão Gemini configurada
+nem o teste de público, e não aprova nem publica o vídeo final. Vários briefings
+podem ser enviados; o tempo de conclusão depende da fila e da VPS. Falhas seguem
+o fluxo de reprocessamento existente. Briefings antigos continuam manuais.
+Nicho, público e tom podem ser escolhidos nas sugestões, escritos livremente ou
+omitidos para a IA definir durante o planejamento.
+
+As prévias existentes com arquivo disponível e sem parecer vinculado do Gemini
+entram na fila retroativa. Falhas preservam notas anteriores do público e têm até
+três tentativas com espera; itens sem arquivo ou rejeitados não são reativados.
