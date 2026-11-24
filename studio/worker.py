@@ -305,6 +305,8 @@ def render(cid, final):
         supervisor.hold_product(db,WORK,'Corte final' if final else 'Prévia',cid,row['title'],verdict['problema']+' '+verdict['ajuste'],tmp)
         tmp.unlink(missing_ok=True)
         db.execute("UPDATE clips SET state='reprovado_gemini' WHERE id=?",(cid,))
+        from studio.mentor_timing import revise as revise_timing
+        revise_timing(db,WORK,cid,verdict)
         return
     tmp.replace(out)
     if not final:
@@ -389,6 +391,8 @@ def score_audience(cid, output):
                 if verdict['parecer']=='devolver':
                     supervisor.hold_product(db,WORK,'Prévia',cid,row['title'],verdict['problema']+' '+verdict['ajuste'],WORK/row['project']/(cid+'-preview.mp4'))
                     db.execute("UPDATE clips SET state='reprovado_gemini' WHERE id=?",(cid,))
+                    from studio.mentor_timing import revise as revise_timing
+                    revise_timing(db,WORK,cid,verdict)
                 report['mentor']=verdict
                 Path(output).write_text(json.dumps(report,ensure_ascii=False))
 
