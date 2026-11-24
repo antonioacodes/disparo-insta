@@ -303,11 +303,12 @@ def queue_pending_reviews(db):
     try:
         pending=db.execute("""SELECT r.id FROM roteiros r JOIN producoes_video p ON p.id=r.id
             WHERE r.status='aguardando_revisao_video' AND p.arquivo_final IS NOT NULL
-            AND NOT EXISTS(SELECT 1 FROM publico_producao a WHERE a.producao=r.id)""").fetchall()
+            AND (NOT EXISTS(SELECT 1 FROM publico_producao a WHERE a.producao=r.id) OR
+                (? AND NOT EXISTS(SELECT 1 FROM supervisor_reviews s WHERE s.entity=r.id AND s.kind='Vídeo')))""",(bool(config().get("GEMINI_API_KEY")),)).fetchall()
         for (pid,) in pending:
             transition(db,pid,'em_producao')
             db.execute("UPDATE producoes_video SET arquivo_final=NULL,fim=NULL,etapa='teste de público' WHERE id=?",(pid,))
-            enqueue(db,pid,'publico',1)
+            enqueue(db,pid,'publico',db.execute('SELECT COALESCE(MAX(rodada),0)+1 FROM publico_producao WHERE producao=?',(pid,)).fetchone()[0])
         db.commit()
     except BaseException:
         db.rollback()
