@@ -637,6 +637,7 @@ if __name__ == "__main__":
         from studio.office import current_audience
         result["audienceTask"]=current_audience(db,WORK) if online else None
         from studio import supervisor
+        result["geminiAtivo"]=supervisor.active(db)
         result["supervisao"]=supervisor.history(db)
         result["inbox"]=activity_review.pending(db,result["ready"])
         result["decisions"]=[dict(r) for r in db.execute("SELECT * FROM activity_decisions ORDER BY at DESC LIMIT 40")]

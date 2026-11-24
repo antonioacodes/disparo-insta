@@ -253,7 +253,7 @@ export default function Office(){
     <div className={styles.overall}><strong>{data?done+' concluídas '+(week?'nesta semana':'hoje'):'Consultando a fila do Studio'}</strong>
       {total>0&&<progress value={done} max={total}/>}<small>{rooms[0].status}</small></div>
     <label><select aria-label="Período do escritório" value={week?'week':'today'} onChange={e=>setWeek(e.target.value==='week')}><option value="today">Hoje</option><option value="week">Esta semana</option></select></label>
-    <nav aria-label="Progresso por agente">{rooms.map((r,i)=><button key={r.name} onClick={()=>select(i)}><i style={{background:r.color}}/>{r.name}</button>)}
+    <nav aria-label="Progresso por agente"><span role="status" className={styles.mentorStatus}>{!failed&&data?.geminiAtivo?.map(t=><strong key={t.id}>Gemini revisando {t.agent} · {t.stage}</strong>)}</span>{rooms.map((r,i)=><button key={r.name} onClick={()=>select(i)}><i style={{background:r.color}}/>{r.name}</button>)}
     <button onClick={()=>select(-1)}>Central de operações ↗</button><Ambience/>{me?.admin===1&&<a href="/usuarios">Usuários</a>}{me&&<button onClick={async()=>{const r=await fetch('/api/account/signout',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});if(r.ok)location.assign('/entrar')}}>Sair · {me.name}</button>}</nav></header>
     {assetError&&<p role="alert">Falha ao carregar a arte do escritório. Recarregue a página.</p>}
     <div className={styles.workspace}><div className={styles.viewport}><div className={styles.world} style={{width:`min(100cqw, ${100*width/height}cqh)`,aspectRatio:`${width}/${height}`}}>

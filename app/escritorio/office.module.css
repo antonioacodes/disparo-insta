@@ -135,3 +135,8 @@
 .inbox button.previewAction{background:#245f98;color:white;border-color:#245f98}
 .inbox button.approveAction{background:#236546;color:white;border-color:#236546}
 .inbox button.rejectAction{background:#9e3636;color:white;border-color:#9e3636}
+
+.mentorStatus:empty{display:none}
+.mentorStatus{display:flex;flex-wrap:wrap;gap:4px}
+.hud .mentorStatus strong{display:inline-flex;align-items:center;gap:6px;border-radius:8px;background:#403656;color:#fff1ff;padding:5px 9px;font-size:.85rem}
+.mentorStatus strong::before{content:'';width:8px;height:8px;border-radius:50%;background:#d4aaff}

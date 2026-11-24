@@ -1,4 +1,8 @@
 """Version-specific editorial reviews through the Google Gemini API."""
+from contextlib import contextmanager
+from pathlib import Path
+import tempfile
+import fcntl
 import hashlib
 import json
 import re
@@ -64,6 +68,47 @@ def evaluate(key,model,context,path):
                 pass
 
 
+def activity_folder(db):
+    database=db.execute('PRAGMA database_list').fetchone()[2]
+    return Path(database).parent/'gemini-activity' if database else None
+
+
+@contextmanager
+def reviewing(db,kind,ident,context):
+    folder=activity_folder(db)
+    if folder is None:
+        yield
+        return
+    folder.mkdir(mode=0o700,exist_ok=True)
+    agent={'Cena':'Bia','Roteiro':'Bia','Teste de público':'Caio','Tendências':'Caio'}.get(kind,'Lia')
+    stage=kind
+    if kind=='Cena':
+        stage='Roteiro · cena '+str(ident).rsplit(':',1)[-1]
+    elif kind=='Vídeo' and context.get('rodada'):
+        stage=f"Vídeo · teste de público · rodada {context['rodada']}"
+    with tempfile.NamedTemporaryFile(mode='w',dir=folder,prefix='review-') as marker:
+        fcntl.flock(marker,fcntl.LOCK_EX)
+        json.dump(dict(id=Path(marker.name).name,agent=agent,stage=stage),marker)
+        marker.flush()
+        yield
+
+
+def active(db):
+    folder=activity_folder(db)
+    tasks=[]
+    if folder:
+        for path in folder.glob('review-*'):
+            try:
+                with path.open() as marker:
+                    try:
+                        fcntl.flock(marker,fcntl.LOCK_SH|fcntl.LOCK_NB)
+                    except BlockingIOError:
+                        tasks.append(json.load(marker))
+            except (FileNotFoundError,ValueError):
+                continue
+    return tasks
+
+
 def review(db,kind,ident,context,path=None):
     cfg=config()
     credentials=keys(cfg.get('GEMINI_API_KEY',''))
@@ -83,7 +128,8 @@ def review(db,kind,ident,context,path=None):
         return json.loads(row[0])
     for key in credentials:
         try:
-            value=evaluate(key,model,context,path)
+            with reviewing(db,kind,ident,context):
+                value=evaluate(key,model,context,path)
         except HTTPError as exc:
             if exc.code==401 or (exc.code==400 and b'API_KEY_INVALID' in exc.read(4096)):
                 continue
