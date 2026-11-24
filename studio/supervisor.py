@@ -114,7 +114,7 @@ def review(db,kind,ident,context,path=None):
     credentials=keys(cfg.get('GEMINI_API_KEY',''))
     if not credentials:
         return None
-    model=cfg.get('GEMINI_MODEL') or 'gemini-2.5-flash'
+    model=cfg.get('GEMINI_MODEL') or 'gemini-flash-lite-latest'
     if not re.fullmatch(r'[\w.-]+',model):
         raise ValueError('GEMINI_MODEL inválido.')
     digest=hashlib.sha256(json.dumps([model,context],sort_keys=True).encode())
@@ -129,7 +129,14 @@ def review(db,kind,ident,context,path=None):
     for key in credentials:
         try:
             with reviewing(db,kind,ident,context):
-                value=evaluate(key,model,context,path)
+                for attempt in range(3):
+                    try:
+                        value=evaluate(key,model,context,path)
+                        break
+                    except HTTPError as exc:
+                        if exc.code not in (429,500,502,503,504) or attempt==2:
+                            raise
+                        time.sleep(15*(attempt+1))
         except HTTPError as exc:
             if exc.code==401 or (exc.code==400 and b'API_KEY_INVALID' in exc.read(4096)):
                 continue
