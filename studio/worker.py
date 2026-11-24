@@ -297,6 +297,12 @@ def render(cid, final):
     filters += f"[{layer}]"+(f"subtitles={subtitle}:force_style='FontName={font},Bold=1,FontSize=14,MarginV=22'" if burn else "null")+"[out]"
     progress(kind,cid,"Gerando o vídeo final" if final else "Gerando a prévia")
     command(["ffmpeg","-loglevel","error","-y","-ss",str(row["start"]),"-i",str(ROOT/"media"/row["media"]),"-t",str(row["end"]-row["start"]),"-filter_complex",filters,"-map","[out]","-map",audio_map,"-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-movflags","+faststart",str(tmp)])
+    from studio import supervisor
+    progress(kind,cid,"Revisando a edição" if roteiros.config().get('GEMINI_API_KEY') else "Finalizando a edição")
+    verdict=supervisor.review(db,'Corte final' if final else 'Prévia',cid,dict(titulo=row['title'],estilo=settings),tmp)
+    if verdict and verdict['parecer']=='devolver':
+        tmp.unlink(missing_ok=True)
+        raise ValueError('Edição devolvida pelo Gemini: '+verdict['ajuste'])
     tmp.replace(out)
     if not final:
         db.execute("INSERT OR REPLACE INTO preview_cache VALUES(?,?,0)", (cid,time.time()+RETENTION))
@@ -617,6 +623,8 @@ if __name__ == "__main__":
         result = snapshot(db, WORK, online)
         from studio.office import current_audience
         result["audienceTask"]=current_audience(db,WORK) if online else None
+        from studio import supervisor
+        result["supervisao"]=supervisor.history(db)
         result["inbox"]=activity_review.pending(db,result["ready"])
         result["decisions"]=[dict(r) for r in db.execute("SELECT * FROM activity_decisions ORDER BY at DESC LIMIT 40")]
         result["scripts"]=roteiros.overview(db)

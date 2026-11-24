@@ -212,6 +212,17 @@ def step(db, ident):
     answer=''.join(parts).strip()
     if not answer:
         raise ValueError('Resposta vazia do modelo')
+    from studio import supervisor
+    for attempt in range(3):
+        verdict=supervisor.review(db,'Tendências',ident,dict(tema=row['query'],analise=answer,registros=candidates))
+        if not verdict or verdict['parecer']=='favoravel':
+            break
+        if attempt==2:
+            raise ValueError('Relatório devolvido pelo Gemini: '+verdict['ajuste'])
+        payload.update(stream=False,prompt=prompt+'\nReescreva considerando esta revisão: '+verdict['ajuste'])
+        with model_slot(Path(db.execute('PRAGMA database_list').fetchone()[2]).parent):
+            with urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:11434/api/generate',json.dumps(payload).encode(),{'Content-Type':'application/json'}),timeout=1800) as response:
+                answer=json.load(response)['response'].strip()
     db.execute("UPDATE trend_timing SET finished=? WHERE report=?",(time.time(),ident))
     db.execute("UPDATE trend_reports SET analysis=?,state='Concluída' WHERE id=? AND state!='Interrompida'",(answer,ident))
 

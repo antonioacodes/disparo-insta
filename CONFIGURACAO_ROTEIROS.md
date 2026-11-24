@@ -71,3 +71,15 @@ Para Mixkit, baixe os vídeos com **Stock Video Free License** e coloque-os junt
 Com AMBIENCIA=on, cada cena pode receber um som ambiente sugerido pelo roteiro, abaixo da narração. Com AMBIENCIA=off o vídeo usa apenas narração. O Commons funciona sem chave. Se configurar Freesound, a busca prioriza prévias de sons CC0 desse provedor. Para projetos monetizados, confirme a licença comercial da API com o Freesound antes de configurar a chave. Sem resultado compatível, a cena mantém a voz sozinha.
 
 Documentação: [Pixabay](https://pixabay.com/api/docs/), [Mixkit](https://mixkit.co/license/), [Commons](https://commons.wikimedia.org/wiki/Commons:Reusing_content_outside_Wikimedia), [Freesound](https://freesound.org/docs/api/terms_of_use.html).
+
+
+### Supervisor Gemini
+
+Configure no ambiente do servidor:
+
+```dotenv
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-2.5-flash
+```
+
+Separe chaves por vírgula, na ordem de preferência. O serviço tenta a próxima se a credencial for inválida. Em caso de cota esgotada ou indisponibilidade, a revisão fica pendente de retomada. Sem chave, continua o fluxo local. Ao configurar, os novos roteiros, relatórios com análise, prévias e vídeos renderizados são enviados ao Google para revisão. O MP4 é enviado com áudio e o serviço solicita a exclusão da cópia remota após o parecer. A revisão editorial humana continua necessária para a publicação.

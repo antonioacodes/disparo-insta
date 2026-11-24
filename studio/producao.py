@@ -237,10 +237,19 @@ def process(db,work,job):
         reports=audience.assess(db,work,pid,scenes,media)
         grade=audience.score(reports)
         weakest=min(range(len(scenes)),key=lambda n:audience.score([reports[n]]))
-        if grade<80 and i<5:
+        from studio import supervisor
+        verdict=supervisor.review(db,'Vídeo',pid,dict(roteiro=scenes),folder/'final.mp4')
+        returned=bool(verdict and verdict['parecer']=='devolver')
+        if returned:
+            index=verdict.get('cena')
+            if type(index) is int and 0<=index<len(scenes):
+                weakest=index
+            reports[weakest]['ajuste']+=' · Gemini: '+verdict['ajuste']
+            reports[weakest]['problema']+=' · Gemini: '+verdict['problema']
+        if (grade<80 or returned) and i<5:
             brief=json.loads(db.execute('SELECT b.dados FROM briefings b JOIN roteiros r ON r.briefing=b.id WHERE r.id=?',(pid,)).fetchone()[0])
             scenes[weakest]=audience.revise(work,scenes[weakest],reports[weakest],brief)
-        if grade<80 and i>=5:
+        if (grade<80 or returned) and i>=5:
             (folder/'final.mp4').unlink(missing_ok=True)
     db.execute('BEGIN IMMEDIATE')
     try:
@@ -253,7 +262,7 @@ def process(db,work,job):
             db.execute("UPDATE producoes_video SET etapa='teste de público',arquivo_final=NULL WHERE id=?",(pid,))
         elif stage=='publico':
             db.execute('INSERT INTO publico_producao VALUES(?,?,?,?)',(pid,i,grade,json.dumps(reports,ensure_ascii=False)))
-            if grade>=80:
+            if grade>=80 and not returned:
                 transition(db,pid,'aguardando_revisao_video')
                 db.execute("UPDATE producoes_video SET etapa='concluida',fim=?,arquivo_final=? WHERE id=?",(time.time(),str(folder/'final.mp4'),pid))
             elif i>=5:

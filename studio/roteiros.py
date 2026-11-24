@@ -18,6 +18,7 @@ TRANSITIONS = {
 
 def init(db):
     db.executescript("""
+    CREATE TABLE IF NOT EXISTS supervisor_reviews(kind TEXT,entity TEXT,version TEXT,result TEXT,model TEXT,reviewed REAL,PRIMARY KEY(kind,entity,version));
     CREATE TABLE IF NOT EXISTS publico_producao(producao TEXT, rodada INTEGER, nota REAL, relatorio TEXT, PRIMARY KEY(producao,rodada));
     CREATE TABLE IF NOT EXISTS briefings(id TEXT PRIMARY KEY, dados TEXT NOT NULL, criado REAL NOT NULL);
     CREATE TABLE IF NOT EXISTS roteiros(id TEXT PRIMARY KEY, briefing TEXT NOT NULL REFERENCES briefings(id),
@@ -127,7 +128,7 @@ def enqueue(db,ident,stage,order=0):
 def config():
     import os
     from pathlib import Path
-    names=('OLLAMA_URL','ROTEIRO_MODELO','PIPER_MODEL_PATH','PEXELS_API_KEY','PIXABAY_API_KEY','FREESOUND_API_KEY','MIXKIT_CATALOG','AMBIENCIA','FFMPEG_THREADS','DIRETORIO_PRODUCAO','ESPACO_MINIMO_GB')
+    names=('GEMINI_API_KEY','GEMINI_MODEL','OLLAMA_URL','ROTEIRO_MODELO','PIPER_MODEL_PATH','PEXELS_API_KEY','PIXABAY_API_KEY','FREESOUND_API_KEY','MIXKIT_CATALOG','AMBIENCIA','FFMPEG_THREADS','DIRETORIO_PRODUCAO','ESPACO_MINIMO_GB')
     values={}
     for file in ('.env','.env.production','.env.local'):
         if Path(file).is_file():
@@ -212,16 +213,29 @@ def stage(db,work,job):
                    dict(titulo=b['titulo_provisorio'],resumos=[s['resumo'] for s in previous('escrita')]))['valor']
         result=text(result) if kind=='descricao' else strings(result,True)
         next_stage=(keys[index+1],0) if index+1<len(keys) else None
+    if not next_stage:
+        from studio import supervisor
+        scenes=[{**s,'b_roll_busca':terms} for s,terms in zip(previous('escrita'),previous('broll'))]
+        script=validate_script(dict(id=ident,versao=row['versao'],status='aguardando_aprovacao',cenas=scenes,
+            titulo_sugerido=previous('titulos')[0],ganchos=previous('ganchos')[0],descricao=previous('descricao')[0],
+            tags=result,aviso_ia=True,tempo=previous('duracao')[0]),b)
+        for attempt in range(5):
+            verdict=supervisor.review(db,'Roteiro',ident,dict(briefing=b,roteiro=script))
+            if not verdict or verdict['parecer']=='favoravel':
+                break
+            if attempt==4:
+                raise ValueError('Roteiro devolvido pelo Gemini: '+verdict['ajuste'])
+            index=verdict.get('cena',0)
+            index=index if type(index) is int and 0<=index<len(scenes) else 0
+            from studio.production_audience import revise
+            scenes[index]=revise(work,scenes[index],verdict,b)
+            validate_script(script,b)
     db.execute('BEGIN IMMEDIATE')
     try:
         db.execute('UPDATE roteiro_etapas SET resultado=?,fim=? WHERE job=?',(json.dumps(result,ensure_ascii=False),time.time(),job['id']))
         if next_stage:
             enqueue(db,ident,*next_stage)
         else:
-            scenes=[{**s,'b_roll_busca':terms} for s,terms in zip(previous('escrita'),previous('broll'))]
-            script=validate_script(dict(id=ident,versao=row['versao'],status='aguardando_aprovacao',cenas=scenes,
-                titulo_sugerido=previous('titulos')[0],ganchos=previous('ganchos')[0],descricao=previous('descricao')[0],
-                tags=result,aviso_ia=True,tempo=previous('duracao')[0]),b)
             db.executemany('INSERT INTO cenas VALUES(?,?,?)',[(ident,i,json.dumps(c,ensure_ascii=False)) for i,c in enumerate(scenes)])
             transition(db,ident,'aguardando_aprovacao')
             db.execute('UPDATE roteiros SET dados=? WHERE id=?',(json.dumps(script,ensure_ascii=False),ident))

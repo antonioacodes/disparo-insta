@@ -322,6 +322,7 @@ export default function Office(){
           {i===1&&testing}{i===1&&data?.trendTask&&<p>{data.trendTask.query} · {data.trendTask.progress?.label||data.trendTask.state}</p>}
         </div>)}
         <ActivityInbox data={data}/>
+        {!!data?.supervisao?.length&&<details><summary>Supervisão Gemini</summary>{data.supervisao.map(r=><article key={r.tipo+r.id+r.versao}><small>Revisado pelo Google Gemini</small><strong>{r.tipo} · {r.parecer.parecer==='favoravel'?'Favorável':'Devolvido ao agente'}</strong><p>{r.parecer.positivo}</p><p>{r.parecer.problema}</p><p>{r.parecer.ajuste}</p><small>Versão {r.versao} · {new Date(r.at*1000).toLocaleString('pt-BR')}</small></article>)}</details>}
       </div>
     </aside></div>
     <dialog ref={dialog} onClose={()=>{select(null);setView('home');setNewProject('')}} className={[styles.dialog,room===0?styles.editDepartment:''].join(' ')}>
