@@ -226,9 +226,9 @@ def process(db,work,job):
         (media/(name+'.srt')).write_text(srt(scene['narracao'],duration))
         ffmpeg(['-i',name+'.mp4','-vf','subtitles='+name+'.srt','-c:v','libx264','-preset','veryfast','-c:a','copy',name+'-leg.mp4'],media)
     elif stage=='finalizar':
-        for ext,out in [('-leg.mp4','final'),('.wav','narracao')]:
+        for ext,out in [('-leg.mp4','final.mp4'),('.wav','narracao.wav')]:
             (media/'lista.txt').write_text(''.join(f"file 'c{index:03d}{ext}'\n" for index in range(len(scenes))))
-            target=folder/(out+Path(ext).suffix)
+            target=folder/out
             temp=target.with_name('tmp-'+target.name)
             ffmpeg(['-f','concat','-safe','1','-i','lista.txt','-c','copy',str(temp)],media)
             temp.replace(target)

@@ -119,9 +119,10 @@ class RoteirosTest(unittest.TestCase):
                 stream.setparams((1,2,16000,0,'NONE',''))
                 stream.writeframes(bytes(2*16000*3))
         def render(args,folder):
+            self.assertIn(Path(args[-1]).suffix, ('.mp4','.wav'))
             (folder/args[-1]).touch()
         cfg={'DIRETORIO_PRODUCAO':str(self.folder/'out'),'ESPACO_MINIMO_GB':'0',
-             'PIPER_MODEL_PATH':str(voice)}
+             'PIPER_MODEL_PATH':str(voice),'AMBIENCIA':'off'}
         with patch.object(producao,'config',return_value=cfg), patch.object(producao,'visual',return_value=None) as broll, patch.object(producao.subprocess,'run',side_effect=piper) as narration, patch.object(producao,'ffmpeg',side_effect=render):
             roteiros.command(self.db,'produzir',self.ident,{})
             while job:=next_job():
