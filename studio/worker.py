@@ -373,7 +373,12 @@ def score_audience(cid, output):
         json.dump([cid,int(time.time())],marker)
         marker.flush()
         from studio import supervisor
-        _score_audience(cid,output)
+        previous=db.execute('SELECT result FROM audience WHERE clip=?',(cid,)).fetchone()
+        saved=json.loads(previous[0]) if previous else None
+        if saved and not saved.get('erro') and roteiros.config().get('GEMINI_API_KEY'):
+            Path(output).write_text(json.dumps(saved,ensure_ascii=False))
+        else:
+            _score_audience(cid,output)
         if roteiros.config().get('GEMINI_API_KEY'):
             row=db.execute('SELECT project,title FROM clips WHERE id=?',(cid,)).fetchone()
             report=json.loads(Path(output).read_text())
@@ -381,6 +386,9 @@ def score_audience(cid, output):
                          pergunta='Você concorda com o teste do Caio? Compare notas e motivos com o vídeo e explique.')
             verdict=supervisor.review(db,'Teste de público',cid,context,WORK/row['project']/(cid+'-preview.mp4'))
             if verdict:
+                if verdict['parecer']=='devolver':
+                    supervisor.hold_product(db,WORK,'Prévia',cid,row['title'],verdict['problema']+' '+verdict['ajuste'],WORK/row['project']/(cid+'-preview.mp4'))
+                    db.execute("UPDATE clips SET state='reprovado_gemini' WHERE id=?",(cid,))
                 report['mentor']=verdict
                 Path(output).write_text(json.dumps(report,ensure_ascii=False))
 
@@ -449,9 +457,13 @@ def audience_loop(clip_id=None):
             raise SystemExit("Configure STUDIO_AUDIENCE_PROVIDER ou STUDIO_AUDIENCE_MODEL no worker.")
         return
     while True:
+        mentor_enabled=bool(roteiros.config().get('GEMINI_API_KEY'))
         row = conn.execute("""SELECT c.*,a.result previous,a.model previous_model FROM clips c LEFT JOIN audience a ON a.clip=c.id
-                            WHERE (a.clip IS NULL OR a.model!=? OR (json_extract(a.result,'$.erro') IS NOT NULL AND COALESCE(json_extract(a.result,'$.attempts'),0)<3 AND COALESCE(json_extract(a.result,'$.retryAt'),0)<=?) OR ? IS NOT NULL) AND c.state NOT IN ('detected','rejected','reprovado_gemini') AND NOT EXISTS (SELECT 1 FROM preview_cache pc WHERE pc.clip=c.id AND (pc.removed=1 OR pc.expires<=CAST(strftime('%s','now') AS INTEGER))) AND (? IS NULL OR c.id=?)
-                            ORDER BY c.rowid LIMIT 1""",(model,int(time.time()),clip_id,clip_id,clip_id)).fetchone()
+                            WHERE (a.clip IS NULL OR a.model!=? OR
+                            (? AND c.state='pending_review' AND json_extract(a.result,'$.mentor') IS NULL
+                             AND NOT EXISTS(SELECT 1 FROM supervisor_reviews s WHERE s.entity=c.id AND s.kind='Teste de público'))
+                            OR (json_extract(a.result,'$.erro') IS NOT NULL AND COALESCE(json_extract(a.result,'$.attempts'),0)<3 AND COALESCE(json_extract(a.result,'$.retryAt'),0)<=?) OR ? IS NOT NULL) AND c.state NOT IN ('detected','rejected','reprovado_gemini') AND NOT EXISTS (SELECT 1 FROM preview_cache pc WHERE pc.clip=c.id AND (pc.removed=1 OR pc.expires<=CAST(strftime('%s','now') AS INTEGER))) AND (? IS NULL OR c.id=?)
+                            ORDER BY c.rowid LIMIT 1""",(model,mentor_enabled,int(time.time()),clip_id,clip_id,clip_id)).fetchone()
         if not row:
             if clip_id:
                 raise SystemExit("Corte sem prévia disponível.")
