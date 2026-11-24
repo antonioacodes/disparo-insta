@@ -75,8 +75,10 @@ export default function Office(){
   if(week)start.setDate(start.getDate()-(start.getDay()+6)%7);
   const done=data?.finished.filter(at=>at>=start.getTime()/1000).length??0;
   const pending=data?.queued??0;
+  const audience=failed?null:data?.audienceTask;
+  const testing=audience&&<span><b>Teste de público</b> · {audience.detail} · {audience.title}</span>;
   const rooms=map.rooms.map((r,i)=>{
-    const status=i===3?(failed?'Sem conexão':data?.scripts?.status??'Conectando'):i===1?(failed?'Sem conexão':data?.trendStatus??'Conectando'):i!==0?'Ainda não configurado':failed?'Sem conexão':data?.status??'Conectando';
+    const status=i===3?(failed?'Sem conexão':data?.scripts?.status??'Conectando'):i===1?(failed?'Sem conexão':audience?'Trabalhando':data?.trendStatus??'Conectando'):i!==0?'Ainda não configurado':failed?'Sem conexão':data?.status??'Conectando';
     return {...r,status,working:status==='Trabalhando'};
   });
   const [walkers,setWalkers]=useState(()=>map.rooms.map(r=>({x:r.x,y:r.y,dir:'down',stride:0,moving:false})));
@@ -138,6 +140,7 @@ export default function Office(){
   const bia=failed?null:data?.scripts?.progress;
   function details(index:number){
     if(index===3)return bia?<BiaProgress task={bia}/>:<span>{data?.scripts?.etapa||rooms[index].status}</span>;
+    if(index===1&&testing)return testing;
     if(index===1)return <span>{data?.trendTask?<><b>{data.trendTask.query}</b><TrendProgress progress={data.trendTask.progress}/></>:rooms[1].status}</span>;
     if(index!==0)return <span>Integração de {rooms[index].name.toLowerCase()} ainda não disponível.</span>;
     return <><span>{rooms[0].status} · {current?.stage||current?.label||'Sem tarefa em execução'}</span>
@@ -290,7 +293,7 @@ export default function Office(){
       }}/>
     {people.map((r,i)=><div key={r.name}>
       <button className={styles.person} aria-label={r.person+" · "+r.name} onPointerEnter={()=>{hovered.current=i}} onPointerLeave={()=>{hovered.current=-1}} onFocus={()=>{hovered.current=i}} onBlur={()=>{hovered.current=-1}} style={anchor(r.x,r.y+(r.seated?-.8:-.5))} onClick={()=>select(i)}>
-        <span className={styles.tag}><strong title={r.status}><StatusIcon status={r.status}/>{r.person}</strong>{i===3&&bia&&<BiaProgress task={bia} compact/>}{r.working&&i===1&&<><small>{data?.trendTask?.state}</small><TrendProgress compact progress={data?.trendTask?.progress}/></>}{r.working&&i===0&&<>
+        <span className={styles.tag}><strong title={r.status}><StatusIcon status={r.status}/>{r.person}</strong>{i===3&&bia&&<BiaProgress task={bia} compact/>}{i===1&&audience&&<small>Teste de público</small>}{r.working&&i===1&&!audience&&<><small>{data?.trendTask?.state}</small><TrendProgress compact progress={data?.trendTask?.progress}/></>}{r.working&&i===0&&<>
           <small>Trabalhando · {eta}</small>
           <progress aria-label="Progresso estimado da tarefa" value={prediction?.percent} max={100}
             style={{accentColor:!prediction||prediction.percent<35?'#ef6464':prediction.percent<75?'#f5c94f':'#61d58b'}}/>
@@ -316,7 +319,7 @@ export default function Office(){
           <strong><i style={{background:r.color}}/>{r.person}</strong><small>{r.status}</small>
           {i===0&&current&&<p>{current.stage||current.label}{current.project&&' · '+current.project}{prediction&&' · '+eta}</p>}
           {i===3&&bia&&<BiaProgress task={bia}/>}
-          {i===1&&data?.trendTask&&<p>{data.trendTask.query} · {data.trendTask.progress?.label||data.trendTask.state}</p>}
+          {i===1&&testing}{i===1&&data?.trendTask&&<p>{data.trendTask.query} · {data.trendTask.progress?.label||data.trendTask.state}</p>}
         </div>)}
         <ActivityInbox data={data}/>
       </div>
@@ -325,7 +328,7 @@ export default function Office(){
       <button autoFocus onClick={()=>select(null)} aria-label="Fechar detalhes">×</button>
       {room===-1&&<><h2>Central de operações</h2>{rooms.map((r,i)=><section key={r.name} className={styles.detail}><h3>{r.person} · {r.name}</h3>{details(i)}</section>)}</>}
       {room!==null&&room>=0&&<Department {...rooms[room]} onBack={view==='home'?undefined:()=>setView('home')}>
-        {room===1&&<Trends/>}{room===3&&<>{bia&&<div className={styles.editActivity}><BiaProgress task={bia}/></div>}<Roteiros/></>}{room===2&&<><Roteiros publicacoes/>{ready.filter(c=>c.kind==='final').map(c=><article key={c.id}><h3>{c.title}</h3><small>Pronto para publicar · {c.projectTitle}</small><OfficeVideo id={c.id} kind="final"/></article>)}</>}
+        {room===1&&<>{testing}<Trends/></>}{room===3&&<>{bia&&<div className={styles.editActivity}><BiaProgress task={bia}/></div>}<Roteiros/></>}{room===2&&<><Roteiros publicacoes/>{ready.filter(c=>c.kind==='final').map(c=><article key={c.id}><h3>{c.title}</h3><small>Pronto para publicar · {c.projectTitle}</small><OfficeVideo id={c.id} kind="final"/></article>)}</>}
         {room!==1&&room!==3&&view==='home'&&<>
           {room===0&&<div className={styles.editActivity}><strong>{current?.stage||current?.label||(data?'Sem tarefa em execução':'Consultando a fila…')}</strong><small>{data?pending+' na fila':'Consultando o Studio'}{rooms[0].working?' · '+eta:''}</small>{rooms[0].working&&<progress aria-label="Progresso estimado da edição" value={prediction?.percent} max={100}/>}</div>}
           <div className={styles.actions}>{room===0?<>

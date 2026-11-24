@@ -356,6 +356,17 @@ def audience_model():
 
 
 def score_audience(cid, output):
+    import fcntl
+    with (WORK/'audience.active').open('a+') as marker:
+        fcntl.flock(marker,fcntl.LOCK_EX)
+        marker.seek(0)
+        marker.truncate()
+        json.dump([cid,int(time.time())],marker)
+        marker.flush()
+        _score_audience(cid,output)
+
+
+def _score_audience(cid, output):
     row = db.execute("SELECT * FROM clips WHERE id=?", (cid,)).fetchone()
     if row is None:
         raise ValueError("Corte indisponível")
@@ -604,6 +615,8 @@ if __name__ == "__main__":
         online = audience_status() != "offline" and beat.exists() and time.time()-beat.stat().st_mtime < 45
         db.execute("BEGIN")
         result = snapshot(db, WORK, online)
+        from studio.office import current_audience
+        result["audienceTask"]=current_audience(db,WORK) if online else None
         result["inbox"]=activity_review.pending(db,result["ready"])
         result["decisions"]=[dict(r) for r in db.execute("SELECT * FROM activity_decisions ORDER BY at DESC LIMIT 40")]
         result["scripts"]=roteiros.overview(db)

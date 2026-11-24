@@ -4,7 +4,7 @@ import statistics
 import time
 
 LABELS = {"import": "Importar vídeo", "analyze": "Analisar vídeo", "preview": "Gerar prévia",
-          "final": "Exportar corte", "purge": "Limpar projeto"}
+          "final": "Exportar corte", "purge": "Limpar projeto","publico":"Teste de público"}
 
 
 def agent_state(online, active, queued, failed):
@@ -33,7 +33,7 @@ def snapshot(db, work, online):
         p.title project,c.title clip,CASE WHEN c.id IS NULL THEN p.duration ELSE c.end-c.start END units
         FROM jobs j LEFT JOIN job_progress t ON t.job=j.id LEFT JOIN clips c ON c.id=j.entity
         LEFT JOIN projects p ON p.id=COALESCE(c.project,j.entity)
-        WHERE j.kind!='roteiro' AND j.state IN ('queued','running','failed') ORDER BY (j.kind='purge') DESC,j.id""").fetchall()
+        WHERE j.kind!='roteiro' AND NOT (j.kind='producao' AND j.entity LIKE '%:publico:%') AND j.state IN ('queued','running','failed') ORDER BY (j.kind='purge') DESC,j.id""").fetchall()
     def describe(j):
         return {"label":LABELS.get(j["kind"],j["kind"]), "project":j["project"], "clip":j["clip"],
                 "stage":j["stage"], "started":j["started"], "queuedAt":j["queued_at"], "error":j["error"]}
@@ -65,7 +65,7 @@ def snapshot(db, work, online):
             ready.append({**item,"kind":kind,"audience":json.loads(raw) if raw else None})
     finished = [r[0] for r in db.execute("""SELECT MAX(e.at) FROM processing_events e JOIN jobs j ON j.id=e.job
         WHERE j.state='done' AND e.message='Concluído' AND e.at>=? GROUP BY j.id""",(now-7*86400,))]
-    recent = db.execute("""SELECT 'Lia' agent, j.id id, j.kind kind, f.finished at,
+    recent = db.execute("""SELECT CASE WHEN j.kind='producao' AND j.entity LIKE '%:publico:%' THEN 'Caio' ELSE 'Lia' END agent, j.id id, CASE WHEN j.kind='producao' AND j.entity LIKE '%:publico:%' THEN 'publico' ELSE j.kind END kind, f.finished at,
         COALESCE(c.title,p.title,'') title FROM job_finish f JOIN jobs j ON j.id=f.job
         LEFT JOIN clips c ON c.id=j.entity LEFT JOIN projects p ON p.id=COALESCE(c.project,j.entity)
         WHERE j.kind!='roteiro' AND j.state='done' AND f.finished>=?
@@ -76,3 +76,23 @@ def snapshot(db, work, online):
     return {"activity":activity,"status":agent_state(online,active,queue,failed),"current":describe(active) if active else None,
             "prediction":prediction if online else None,"queued":len(queue),"next":describe(queue[0]) if queue else None,
             "failed":len(failed),"lastError":describe(failed[-1]) if failed else None,"finished":finished,"ready":ready}
+
+def current_audience(db,work):
+    import fcntl
+    running=db.execute("""SELECT json_extract(b.dados,'$.titulo_provisorio'),e.cena,e.inicio
+        FROM producao_etapas e JOIN jobs j ON j.id=e.job JOIN roteiros r ON r.id=e.producao
+        JOIN briefings b ON b.id=r.briefing WHERE e.etapa='publico' AND j.state='running' LIMIT 1""").fetchone()
+    if running:
+        return dict(title=running[0],detail=f'Vídeo · rodada {running[1]}',started=running[2])
+    try:
+        with (work/'audience.active').open() as marker:
+            try:
+                fcntl.flock(marker,fcntl.LOCK_SH|fcntl.LOCK_NB)
+            except BlockingIOError:
+                cid,started=json.load(marker)
+                clip=db.execute('SELECT title FROM clips WHERE id=?',(cid,)).fetchone()
+                if clip:
+                    return dict(title=clip[0],detail='Prévia',started=started)
+    except (FileNotFoundError,ValueError):
+        pass
+    return None
