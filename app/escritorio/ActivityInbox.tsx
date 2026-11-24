@@ -5,7 +5,7 @@ import {EditingStyle,defaults} from '../studio/EditingStyle';
 import type {Office,InboxItem} from './useOffice';
 import styles from './office.module.css';
 
-const labels={preview:'Prévia pronta',trend:'Pesquisa concluída',briefing:'Briefing pronto',script:'Roteiro pronto',video:'Vídeo produzido',job:'Tarefa concluída'};
+const labels={mentorProduct:'Produto reprovado',preview:'Prévia pronta',trend:'Pesquisa concluída',briefing:'Briefing pronto',script:'Roteiro pronto',video:'Vídeo produzido',job:'Tarefa concluída'};
 function votes(v?:Verdict|null){
   const people=v?.personas?.filter(p=>p.notas&&Object.keys(p.notas).length>0);
   if(!people?.length)return null;
@@ -52,11 +52,11 @@ export function ActivityInbox({data}:{data:Office|null}){
     {pending.map(i=>{
       const v=data?.ready.find(c=>c.id===i.entity)?.audience;
       const pct=votes(v);
-      return <article key={i.kind+i.entity}><small>● Não lida · {i.agent}</small><strong>{i.label||labels[i.kind]}</strong><p>{i.title}</p>
+      return <article key={i.kind+i.entity}><small>● Não lida · {i.agent}</small><strong>{i.label||labels[i.kind]}</strong><p>{i.title}</p>{i.kind==='mentorProduct'&&<b className={styles.mentorRejected}>Reprovado pelo Gemini</b>}
         <div className={styles.reviewActions}>
-          {i.kind==='preview'&&<button className={styles.previewAction} onClick={()=>open(i,'view')} aria-label={'Ver prévia de '+i.title}><Eye size={14}/> Ver prévia</button>}
-          <button className={styles.approveAction} onClick={()=>open(i,'approve')}>Aprovar</button>
-          <button className={styles.rejectAction} onClick={()=>open(i,'reject')}>Reprovar</button>
+          {(i.kind==='preview'||i.kind==='mentorProduct')&&<button className={styles.previewAction} onClick={()=>open(i,'view')} aria-label={'Ver prévia de '+i.title}><Eye size={14}/> Ver prévia</button>}
+          {i.kind!=='mentorProduct'&&<button className={styles.approveAction} onClick={()=>open(i,'approve')}>Aprovar</button>}
+          <button className={styles.rejectAction} onClick={()=>open(i,'reject')}>{i.kind==='mentorProduct'?'Descartar':'Reprovar'}</button>
         </div>
         {pct!==null&&<small><b style={{color:'#236139'}}>{pct}% favoráveis</b> · <b style={{color:'#9e3030'}}>{100-pct}% desfavoráveis</b></small>}
       </article>})}
@@ -68,6 +68,7 @@ export function ActivityInbox({data}:{data:Office|null}){
       {item.kind==='preview'&&clip&&<><video controls playsInline src={'/api/studio/workflow/video?kind=preview&id='+item.entity}/>
         <Audience v={verdict} status={data?.audienceStatus} clip={clip} removed={false}/>
         {votes(verdict)!==null&&<small>Favoráveis representam os perfis simulados com média de pelo menos 60/100.</small>}</>}
+      {item.kind==='mentorProduct'&&<><b className={styles.mentorRejected}>Reprovado pelo Gemini</b><p>{item.reason}</p><video controls playsInline src={'/api/studio/workflow/video?kind=mentorProduct&id='+item.entity}/></>}
       {item.kind==='video'&&<video controls playsInline src={'/api/studio/workflow/video?kind=producao&id='+item.entity}/>}
       {item.kind==='script'&&<p style={{whiteSpace:'pre-line'}}>{script||'Carregando roteiro…'}</p>}
       {intent==='approve'&&item.kind==='trend'&&<><label>Escolher vídeos<select value={mode} onChange={e=>setMode(e.target.value)}>
@@ -77,8 +78,8 @@ export function ActivityInbox({data}:{data:Office|null}){
       {intent==='approve'&&['video','script'].includes(item.kind)&&<label><input type="checkbox" checked={checked} onChange={e=>check(e.target.checked)}/> Revisei o conteúdo e autorizo a próxima etapa.</label>}
       {intent==='approve'&&item.kind==='video'&&<label><input type="checkbox" checked={aiLabel} onChange={e=>labelAI(e.target.checked)}/> Rotular uso de IA</label>}
       {intent==='reject'&&<>{item.kind==='preview'&&<p>A reprovação exclui esta prévia da VPS. O vídeo original continua disponível.</p>}<label>Comentário<textarea value={note} onChange={e=>setNote(e.target.value)}/></label></>}
-      {intent==='view'?<div className={styles.reviewActions}><button className={styles.approveAction} onClick={()=>setIntent('approve')}>Aprovar</button><button className={styles.rejectAction} onClick={()=>setIntent('reject')}>Reprovar</button></div>:
-      <button className={intent==='reject'?styles.rejectAction:styles.approveAction} disabled={!data?.reviewEnabled||busy||(intent==='approve'&&((item.kind==='script'&&(!script||!checked))||(item.kind==='video'&&!checked)))} onClick={decide}>{busy?'Salvando…':intent==='reject'?'Confirmar reprovação':({trend:'Enviar para edição',briefing:'Gerar roteiro',script:'Produzir vídeo',preview:'Preparar para publicação',video:'Enviar para Publicações',job:'Confirmar aprovação'})[item.kind]}</button>}
+      {intent==='view'?<div className={styles.reviewActions}>{item.kind!=='mentorProduct'&&<button className={styles.approveAction} onClick={()=>setIntent('approve')}>Aprovar</button>}<button className={styles.rejectAction} onClick={()=>setIntent('reject')}>{item.kind==='mentorProduct'?'Descartar':'Reprovar'}</button></div>:
+      <button className={intent==='reject'?styles.rejectAction:styles.approveAction} disabled={!data?.reviewEnabled||busy||(intent==='approve'&&((item.kind==='script'&&(!script||!checked))||(item.kind==='video'&&!checked)))} onClick={decide}>{busy?'Salvando…':intent==='reject'?(item.kind==='mentorProduct'?'Confirmar descarte':'Confirmar reprovação'):({mentorProduct:'Descartar',trend:'Enviar para edição',briefing:'Gerar roteiro',script:'Produzir vídeo',preview:'Preparar para publicação',video:'Enviar para Publicações',job:'Confirmar aprovação'})[item.kind]}</button>}
       {message&&<p role="status">{message}</p>}</>}
     </dialog></section>;
 }

@@ -18,6 +18,7 @@ TRANSITIONS = {
 
 def init(db):
     db.executescript("""
+    CREATE TABLE IF NOT EXISTS mentor_products(id TEXT PRIMARY KEY,kind TEXT,entity TEXT,title TEXT,reason TEXT,created REAL);
     CREATE TABLE IF NOT EXISTS supervisor_reviews(kind TEXT,entity TEXT,version TEXT,result TEXT,model TEXT,reviewed REAL,PRIMARY KEY(kind,entity,version));
     CREATE TABLE IF NOT EXISTS publico_producao(producao TEXT, rodada INTEGER, nota REAL, relatorio TEXT, PRIMARY KEY(producao,rodada));
     CREATE TABLE IF NOT EXISTS briefings(id TEXT PRIMARY KEY, dados TEXT NOT NULL, criado REAL NOT NULL);

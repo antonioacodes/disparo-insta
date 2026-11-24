@@ -26,6 +26,9 @@ def pending(db,ready):
         SELECT 1 FROM activity_decisions d WHERE d.kind='job' AND d.entity=CAST(j.id AS TEXT)) ORDER BY f.finished DESC"""):
         rows.append(dict(kind='job',entity=str(r['id']),title=r['title'],agent='Lia',
                          label={'import':'Importação concluída','analyze':'Análise concluída','final':'Exportação concluída'}[r['kind']]))
+    for r in db.execute("""SELECT p.* FROM mentor_products p WHERE NOT EXISTS(
+        SELECT 1 FROM activity_decisions d WHERE d.kind='mentorProduct' AND d.entity=p.id) ORDER BY created DESC"""):
+        rows.append(dict(kind='mentorProduct',entity=r['id'],title=r['title'],agent='Lia',label=r['kind'],reason=r['reason']))
     return rows
 
 
@@ -55,7 +58,15 @@ def decide(db,work,project,kind,entity,approve,opts):
                 raise ValueError('Esta atividade já recebeu outra decisão.')
             db.commit()
             return
-        if kind=='job':
+        if kind=='mentorProduct':
+            if approve:
+                raise ValueError('Produto reprovado pelo Gemini.')
+            row=db.execute('SELECT title FROM mentor_products WHERE id=?',(entity,)).fetchone()
+            if not row:
+                raise ValueError('Produto indisponível.')
+            title=row[0]
+            (work/'mentor-products'/(entity+'.mp4')).unlink(missing_ok=True)
+        elif kind=='job':
             row=db.execute("SELECT kind FROM jobs WHERE id=? AND state='done' AND kind IN ('final','analyze','import')",(entity,)).fetchone()
             if not row:
                 raise ValueError('Conclusão indisponível.')

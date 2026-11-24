@@ -16,6 +16,8 @@ export async function GET(request:Request) {
     const {stdout}=await promisify(execFile)('python3',['-m','studio.worker','roteiros','arquivo',id]);
     filename=JSON.parse(stdout).arquivo;
     if(!filename)return new Response(null,{status:404});
+  }else if(kind==='mentorProduct'&&/^[a-f0-9]{64}$/.test(id)){
+    filename=path.join(process.cwd(),'storage','studio','mentor-products',id+'.mp4');
   }else{
     if(!/^[a-f0-9]{32}-\d+$/.test(id)||!['preview','final'].includes(kind||''))return new Response(null,{status:400});
     filename=path.join(process.cwd(),'storage','studio',id.split('-')[0],id+'-'+kind+'.mp4');

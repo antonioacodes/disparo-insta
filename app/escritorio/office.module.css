@@ -140,3 +140,5 @@
 .mentorStatus{display:flex;flex-wrap:wrap;gap:4px}
 .hud .mentorStatus strong{display:inline-flex;align-items:center;gap:6px;border-radius:8px;background:#403656;color:#fff1ff;padding:5px 9px;font-size:.85rem}
 .mentorStatus strong::before{content:'';width:8px;height:8px;border-radius:50%;background:#d4aaff}
+
+.mentorRejected{display:inline-block;width:fit-content;padding:3px 8px;border-radius:8px;background:#862f36;color:white;font:600 13px system-ui}

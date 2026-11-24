@@ -37,7 +37,7 @@ export async function POST(request:Request) {
   try {
     const {action,id,title,start,end,corrections,preset,deletePreview,url,payload} = await request.json();
     if(action==='activity-review'){
-      if(!['briefing','script','video','preview','trend','job'].includes(payload?.kind)||!['approve','reject'].includes(payload?.decision)||typeof id!=='string'||id.length>100)
+      if(!['briefing','script','video','preview','trend','job','mentorProduct'].includes(payload?.kind)||!['approve','reject'].includes(payload?.decision)||typeof id!=='string'||id.length>100)
         return NextResponse.json({error:'Decisão inválida.'},{status:400});
       const result=JSON.parse(await worker(['activity-review',payload.kind,id,payload.decision,JSON.stringify(payload.options??{})]));
       return NextResponse.json(result,{status:result.error?409:200});

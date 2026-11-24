@@ -151,3 +151,25 @@ def guidance(db,kinds):
         WHERE kind IN ({placeholders}) AND json_extract(result,'$.parecer')='devolver'
         GROUP BY json_extract(result,'$.ajuste') ORDER BY MAX(reviewed) DESC LIMIT 5""",kinds)
     return [r[0][:400] for r in rows]
+
+def hold_product(db,work,kind,entity,title,reason,path):
+    import os
+    import shutil
+    # Key by rendered bytes so retries keep one copy of the same product.
+    digest=hashlib.sha256((kind+':'+entity).encode())
+    with path.open('rb') as src:
+        while chunk:=src.read(1024*1024):
+            digest.update(chunk)
+    ident=digest.hexdigest()
+    directory=work/'mentor-products'
+    directory.mkdir(exist_ok=True)
+    target=directory/(ident+'.mp4')
+    if not target.exists():
+        try:
+            os.link(path,target)
+        except OSError:
+            with tempfile.NamedTemporaryFile(dir=directory,delete=False) as tmp:
+                with path.open('rb') as src:
+                    shutil.copyfileobj(src,tmp)
+            os.replace(tmp.name,target)
+    db.execute('INSERT OR IGNORE INTO mentor_products VALUES(?,?,?,?,?,?)',(ident,kind,entity,title,reason,time.time()))

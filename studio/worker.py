@@ -302,8 +302,10 @@ def render(cid, final):
     verdict=supervisor.review(db,'Corte final' if final else 'Prévia',cid,dict(titulo=row['title'],estilo=settings,inicio=row['start'],fim=row['end'],
         duracao=row['end']-row['start'],legendas=blocks,orientacoes=supervisor.guidance(db,['Prévia','Corte final'])),tmp)
     if verdict and verdict['parecer']=='devolver':
+        supervisor.hold_product(db,WORK,'Corte final' if final else 'Prévia',cid,row['title'],verdict['problema']+' '+verdict['ajuste'],tmp)
         tmp.unlink(missing_ok=True)
-        raise ValueError('Edição devolvida pelo Gemini: '+verdict['ajuste'])
+        db.execute("UPDATE clips SET state='reprovado_gemini' WHERE id=?",(cid,))
+        return
     tmp.replace(out)
     if not final:
         db.execute("INSERT OR REPLACE INTO preview_cache VALUES(?,?,0)", (cid,time.time()+RETENTION))
@@ -448,7 +450,7 @@ def audience_loop(clip_id=None):
         return
     while True:
         row = conn.execute("""SELECT c.*,a.result previous,a.model previous_model FROM clips c LEFT JOIN audience a ON a.clip=c.id
-                            WHERE (a.clip IS NULL OR a.model!=? OR (json_extract(a.result,'$.erro') IS NOT NULL AND COALESCE(json_extract(a.result,'$.attempts'),0)<3 AND COALESCE(json_extract(a.result,'$.retryAt'),0)<=?) OR ? IS NOT NULL) AND c.state NOT IN ('detected','rejected') AND NOT EXISTS (SELECT 1 FROM preview_cache pc WHERE pc.clip=c.id AND (pc.removed=1 OR pc.expires<=CAST(strftime('%s','now') AS INTEGER))) AND (? IS NULL OR c.id=?)
+                            WHERE (a.clip IS NULL OR a.model!=? OR (json_extract(a.result,'$.erro') IS NOT NULL AND COALESCE(json_extract(a.result,'$.attempts'),0)<3 AND COALESCE(json_extract(a.result,'$.retryAt'),0)<=?) OR ? IS NOT NULL) AND c.state NOT IN ('detected','rejected','reprovado_gemini') AND NOT EXISTS (SELECT 1 FROM preview_cache pc WHERE pc.clip=c.id AND (pc.removed=1 OR pc.expires<=CAST(strftime('%s','now') AS INTEGER))) AND (? IS NULL OR c.id=?)
                             ORDER BY c.rowid LIMIT 1""",(model,int(time.time()),clip_id,clip_id,clip_id)).fetchone()
         if not row:
             if clip_id:

@@ -243,6 +243,8 @@ def process(db,work,job):
             orientacoes=supervisor.guidance(db,['Vídeo','Prévia'])),folder/'final.mp4')
         returned=bool(verdict and verdict['parecer']=='devolver')
         if returned:
+            title=json.loads(row[0]).get('titulo_sugerido') or [pid]
+            supervisor.hold_product(db,work,'Vídeo',pid,title[0]+' · rodada '+str(i),verdict['problema']+' '+verdict['ajuste'],folder/'final.mp4')
             index=verdict.get('cena')
             if type(index) is int and 0<=index<len(scenes):
                 weakest=index
