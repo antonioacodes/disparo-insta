@@ -58,7 +58,7 @@ def validate_brief(b):
     seconds=b.get('duracao_alvo_segundos')
     if type(seconds) is not int or not 1<=seconds<=7200:
         raise ValueError('Duração inválida.')
-    return {**{k:text(b.get(k),600) for k in ('titulo_provisorio','nicho','tom','publico')},
+    return {**{k:(text(b.get(k),600) if k=='titulo_provisorio' or b.get(k) else '') for k in ('titulo_provisorio','nicho','tom','publico')},
             'formato':b['formato'],'duracao_alvo_segundos':seconds,
             'estrutura':strings(b.get('estrutura'),True),'restricoes':strings(b.get('restricoes')),
             'fontes_de_pesquisa':strings(b.get('fontes_de_pesquisa'))}
@@ -179,6 +179,16 @@ def stage(db,work,job):
     plan=previous('planejamento')
     next_stage=None
     if kind=='planejamento':
+        missing=[k for k in ('nicho','publico','tom') if not b.get(k)]
+        if missing:
+            chosen=ask('Defina apenas os campos vazios do briefing a partir da ideia e formato. Retorne objeto JSON com '+', '.join(missing)+'. Seja específico e coerente com o tema.',b)
+            for key in missing:
+                b[key]=text(chosen.get(key),600)
+            saved=json.loads(row['brief'])
+            for key in missing:
+                saved[key]=b[key]
+            saved['campos_definidos_pela_ia']=missing
+            db.execute('UPDATE briefings SET dados=? WHERE id=?',(json.dumps(saved,ensure_ascii=False),row['briefing']))
         history=db.execute("""SELECT p.relatorio FROM publico_producao p JOIN roteiros r ON r.id=p.producao
             WHERE r.status='descartado' AND p.rodada=5 ORDER BY r.criado DESC LIMIT 3""").fetchall()
         b['pontos_de_atencao']=[s['ajuste'] for h in history for s in sorted(json.loads(h[0]),key=lambda x:sum(x['notas'].values()))[:2]]

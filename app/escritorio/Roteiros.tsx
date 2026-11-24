@@ -26,10 +26,21 @@ export function Roteiros({publicacoes=false}:{publicacoes?:boolean}){
     {creating?<form onSubmit={e=>{e.preventDefault();const form=new FormData(e.currentTarget);
       const lines=(key:string)=>String(form.get(key)||'').split('\n').map(s=>s.trim()).filter(Boolean);
       void act('briefing',{...Object.fromEntries(form),duracao_alvo_segundos:Number(form.get('duracao_alvo_segundos')),estrutura:['gancho','contexto','escalada','virada','fechamento'],restricoes:lines('restricoes'),fontes_de_pesquisa:lines('fontes_de_pesquisa')})}}>
-      <h3>Novo briefing</h3>{Object.entries({titulo_provisorio:'Título provisório',nicho:'Nicho',publico:'Público',tom:'Tom da narração'}).map(([key,label])=><label key={key}>{label}<input name={key} required maxLength={600}/></label>)}
+      <h3>Novo briefing</h3>
+      <label>Ideia ou título provisório<input name="titulo_provisorio" required maxLength={600} placeholder="Ex.: por que sentimos que alguém está nos observando?"/></label>
+      <small>Escolha uma dúvida, uma história ou uma descoberta. No Caio, pesquise o assunto e use os resultados recentes para encontrar um recorte. Descreva aqui o que o vídeo deve contar.</small>
+      {[
+        {key:'nicho',label:'Nicho',help:'Qual assunto o canal aborda?',choices:['Curiosidades','Histórias de suspense','Ciência e tecnologia','Games','História','Viagens','Culinária']},
+        {key:'publico',label:'Público',help:'Quem deve entender e se interessar pelo vídeo?',choices:['Público geral','Iniciantes no assunto','Jovens adultos','Fãs de games','Pessoas que gostam de mistérios','Profissionais da área']},
+        {key:'tom',label:'Tom da narração',help:'Como a história deve soar?',choices:['Conversacional','Didático e acolhedor','Suspense crescente','Documental','Bem-humorado','Inspirador']}
+      ].map(field=><label key={field.key}>{field.label}<small>{field.help}</small>
+        <input name={field.key} list={'brief-'+field.key} maxLength={600} placeholder="IA escolhe se deixar em branco"/>
+        <datalist id={'brief-'+field.key}>{field.choices.map(choice=><option key={choice} value={choice}/>)}</datalist>
+      </label>)}
+      <small>Selecione uma sugestão, escreva sua opção ou deixe em branco. Ao gerar o roteiro, a IA define os campos vazios com base na ideia.</small>
       <label>Formato<select name="formato"><option value="shorts">Shorts · vertical</option><option value="longo">Longo · horizontal</option></select></label>
       <label>Duração em segundos<input type="number" name="duracao_alvo_segundos" min="1" max="7200" required defaultValue="60"/></label>
-      <label>Fontes de pesquisa, uma por linha<textarea name="fontes_de_pesquisa"/></label><label>Restrições<textarea name="restricoes"/></label>
+      <label>Fontes de pesquisa, uma por linha<textarea name="fontes_de_pesquisa" placeholder="Cole links de fontes confiáveis que sustentem os fatos do vídeo."/></label><label>Restrições<textarea name="restricoes"/></label>
       <button disabled={busy}>Salvar briefing</button><button type="button" onClick={()=>setCreating(false)}>Voltar</button>
     </form>:item?<><button onClick={()=>{setSelected('');setReviewed(false)}}>← Todos os roteiros</button><h3>{item.titulo}</h3><small>Versão {item.versao} · {item.status.replaceAll('_',' ')}</small>
       {item.comentario&&<p>{item.comentario}</p>}{item.roteiro?.cenas.map(c=><article key={c.id}><strong>{c.tipo}</strong><p>{c.narracao}</p><small>{c.verificar?'Requer verificação. ':''}{c.fontes.join(' · ')}</small></article>)}
