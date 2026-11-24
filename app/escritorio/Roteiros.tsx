@@ -2,7 +2,7 @@ import {useEffect,useState} from 'react';
 import styles from './office.module.css';
 
 type Scene={id:string;tipo:string;legenda_destaque:string;narracao:string;verificar:boolean;fontes:string[]};
-type Item={id:string;versao:number;titulo:string;status:string;comentario:string|null;producao:{etapa:string;erro:string|null;chamadas:number;pronto:boolean;legendas:{cena:number;srt:string;segundos:number}[];etapas:{etapa:string;cena:number;inicio:number|null;fim:number|null}[];assets:{origem:string;autor:string;url:string}[]}|null;roteiro:{cenas:Scene[]}|null};
+type Item={id:string;versao:number;titulo:string;status:string;comentario:string|null;producao:{publico?:{rodada:number;nota:number;cenas:{problema:string;ajuste:string;notas:Record<string,number>}[]}[];etapa:string;erro:string|null;chamadas:number;pronto:boolean;legendas:{cena:number;srt:string;segundos:number}[];etapas:{etapa:string;cena:number;inicio:number|null;fim:number|null}[];assets:{origem:string;autor:string;url:string}[]}|null;roteiro:{cenas:Scene[]}|null};
 const endpoint='/api/studio/workflow';
 export function Roteiros({publicacoes=false}:{publicacoes?:boolean}){
   const [rows,setRows]=useState<Item[]>([]),[selected,setSelected]=useState(''),[creating,setCreating]=useState(false);
@@ -40,6 +40,8 @@ export function Roteiros({publicacoes=false}:{publicacoes?:boolean}){
         <label>Comentário da revisão<textarea value={comment} onChange={e=>setComment(e.target.value)}/></label><button disabled={busy||!comment.trim()} onClick={()=>act('rejeitar',{comentario:comment})}>Devolver roteiro</button></>}
       {item.status==='aprovado'&&<button disabled={busy} onClick={()=>act('produzir')}>Produzir vídeo</button>}
       {item.producao&&<section><h3>Revisão do vídeo</h3><p>{item.producao.etapa} · {item.producao.chamadas} consultas ao Pexels</p>
+        {item.producao.publico?.map(r=><details key={r.rodada}><summary>Público simulado · rodada {r.rodada} · {Math.floor(r.nota*10)/10}%</summary>
+          {r.cenas.map((c,i)=><article key={i}><strong>Cena {i+1}</strong><p>{Object.entries(c.notas).map(([k,v])=>k+' '+v+'/100').join(' · ')}</p><p>{c.problema}</p><p>{c.ajuste}</p></article>)}</details>)}
         {item.producao.erro&&<p role="alert">{item.producao.erro}</p>}
         {item.producao.pronto&&<video key={item.producao.etapas[item.producao.etapas.length-1]?.fim??undefined} controls playsInline preload="metadata" src={'/api/studio/workflow/video?kind=producao&id='+item.id}/>}
         <details><summary>Tempos e créditos</summary>{item.producao.etapas.map(e=><p key={e.etapa+e.cena}>{e.etapa} · cena {e.cena+1} · {e.inicio&&e.fim?Math.round(e.fim-e.inicio)+' s':'Sem dados ainda'}</p>)}

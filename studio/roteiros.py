@@ -9,7 +9,7 @@ TRANSITIONS = {
     'rascunho': {'aguardando_aprovacao','erro'},
     'aguardando_aprovacao': {'aprovado','rejeitado'},
     'aprovado': {'em_producao','rejeitado'},
-    'em_producao': {'aguardando_revisao_video','erro'},
+    'em_producao': {'aguardando_revisao_video','descartado','erro'}, 'descartado':set(),
     'aguardando_revisao_video': {'aprovado_para_publicacao','em_producao'},
     'aprovado_para_publicacao': set(), 'publicado': set(),
     'rejeitado': set(), 'erro': {'rascunho','em_producao'},
@@ -18,6 +18,7 @@ TRANSITIONS = {
 
 def init(db):
     db.executescript("""
+    CREATE TABLE IF NOT EXISTS publico_producao(producao TEXT, rodada INTEGER, nota REAL, relatorio TEXT, PRIMARY KEY(producao,rodada));
     CREATE TABLE IF NOT EXISTS briefings(id TEXT PRIMARY KEY, dados TEXT NOT NULL, criado REAL NOT NULL);
     CREATE TABLE IF NOT EXISTS roteiros(id TEXT PRIMARY KEY, briefing TEXT NOT NULL REFERENCES briefings(id),
         versao INTEGER NOT NULL, status TEXT NOT NULL, dados TEXT, comentario TEXT, criado REAL NOT NULL,
@@ -174,6 +175,9 @@ def stage(db,work,job):
     plan=previous('planejamento')
     next_stage=None
     if kind=='planejamento':
+        history=db.execute("""SELECT p.relatorio FROM publico_producao p JOIN roteiros r ON r.id=p.producao
+            WHERE r.status='descartado' AND p.rodada=5 ORDER BY r.criado DESC LIMIT 3""").fetchall()
+        b['pontos_de_atencao']=[s['ajuste'] for h in history for s in sorted(json.loads(h[0]),key=lambda x:sum(x['notas'].values()))[:2]]
         result=ask('Retorne {cenas:[{tipo,objetivo,duracao_segundos}]}. Use uma cena por bloco da estrutura, com duração total próxima do alvo.',b)['cenas']
         if not isinstance(result,list) or not 1<=len(result)<=64:
             raise ValueError('Plano de cenas inválido.')

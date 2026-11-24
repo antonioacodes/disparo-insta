@@ -495,6 +495,7 @@ def worker():
     import fcntl
     with (WORK/"worker.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        producao.queue_pending_reviews(db)
         provider = "disabled"
         if os.getenv("STUDIO_AUDIENCE_PROVIDER") == "tinytroupe":
             provider = "TinyTroupe"

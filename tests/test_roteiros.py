@@ -87,6 +87,15 @@ class RoteirosTest(unittest.TestCase):
                 self.assertEqual(proc.communicate(timeout=5)[0].strip(),'entrou')
 
     def test_complete_pipeline_with_simulated_providers(self):
+        self.run_production([80,80])
+
+    def test_low_score_corrected_then_approved(self):
+        self.run_production([79,80,80])
+
+    def test_five_failed_assessments_discard(self):
+        self.run_production([79]*5)
+
+    def run_production(self,grades):
         import wave
         responses=[
             {'cenas':[{'tipo':'gancho','objetivo':'encontrar o objeto','duracao_segundos':3}]},
@@ -123,12 +132,19 @@ class RoteirosTest(unittest.TestCase):
             (folder/args[-1]).touch()
         cfg={'DIRETORIO_PRODUCAO':str(self.folder/'out'),'ESPACO_MINIMO_GB':'0',
              'PIPER_MODEL_PATH':str(voice),'AMBIENCIA':'off'}
-        with patch.object(producao,'config',return_value=cfg), patch.object(producao,'visual',return_value=None) as broll, patch.object(producao.subprocess,'run',side_effect=piper) as narration, patch.object(producao,'ffmpeg',side_effect=render):
+        reports=[[dict(notas={k:grade for k in producao.audience.DIMENSIONS},problema='Teste',ajuste='Teste')] for grade in grades]
+        with patch.object(producao.audience,'revise',side_effect=lambda work,scene,*args:{**scene,'narracao':scene['narracao']+' Sim.'}), patch.object(producao.audience,'assess',side_effect=reports), patch.object(producao,'config',return_value=cfg), patch.object(producao,'visual',return_value=None) as broll, patch.object(producao.subprocess,'run',side_effect=piper) as narration, patch.object(producao,'ffmpeg',side_effect=render):
             roteiros.command(self.db,'produzir',self.ident,{})
             while job:=next_job():
                 producao.process(self.db,self.folder,job)
                 finish(job)
             report=producao.review(self.db,self.ident)
+            if grades[-1]<80:
+                self.assertFalse(report['pronto'])
+                self.assertEqual(len(report['publico']),5)
+                self.assertFalse((producao.root()/self.ident/'final.mp4').exists())
+                self.assertEqual(roteiros.command(self.db,'list','',{})[0]['status'],'descartado')
+                return
             self.assertTrue(report['pronto'])
             self.assertIn('00:00:03,000',report['legendas'][0]['srt'])
             roteiros.command(self.db,'regenerar',self.ident,dict(cena=0,parte='legendas',comentario='Revisão'))
@@ -137,9 +153,9 @@ class RoteirosTest(unittest.TestCase):
                 stages.append(job['entity'].split(':')[1])
                 producao.process(self.db,self.folder,job)
                 finish(job)
-            self.assertEqual(stages,['legendas','finalizar'])
-            self.assertEqual(broll.call_count,1)
-            self.assertEqual(narration.call_count,1)
+            self.assertEqual(stages,['legendas','finalizar','publico'])
+            self.assertEqual(broll.call_count,len(grades)-1)
+            self.assertEqual(narration.call_count,len(grades)-1)
             roteiros.command(self.db,'aprovar-video',self.ident,dict(rotulagem_ia=True,revisado=True))
             self.assertTrue((producao.root()/self.ident/'final.mp4').is_file())
             self.assertEqual(roteiros.command(self.db,'list','',{})[0]['status'],'aprovado_para_publicacao')

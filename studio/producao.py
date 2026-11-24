@@ -14,6 +14,7 @@ import urllib.parse
 import urllib.request
 import wave
 
+from studio import production_audience as audience
 from studio import stock_media as stock
 from studio.roteiros import config, transition
 
@@ -182,7 +183,7 @@ def process(db,work,job):
     db.execute('UPDATE producoes_video SET etapa=?,erro=NULL WHERE id=?',(stage,pid))
     db.execute('UPDATE producao_etapas SET inicio=? WHERE job=?',(time.time(),job['id']))
     name=f'c{i:03d}'
-    scene=scenes[i]
+    scene=scenes[i] if stage in STAGES else None
     if stage=='broll':
         (media/(name+'.json')).write_text(json.dumps(visual(db,pid,i,scene,vertical)))
     elif stage=='narracao':
@@ -232,14 +233,42 @@ def process(db,work,job):
             temp=target.with_name('tmp-'+target.name)
             ffmpeg(['-f','concat','-safe','1','-i','lista.txt','-c','copy',str(temp)],media)
             temp.replace(target)
+    elif stage=='publico':
+        reports=audience.assess(db,work,pid,scenes,media)
+        grade=audience.score(reports)
+        weakest=min(range(len(scenes)),key=lambda n:audience.score([reports[n]]))
+        if grade<80 and i<5:
+            brief=json.loads(db.execute('SELECT b.dados FROM briefings b JOIN roteiros r ON r.briefing=b.id WHERE r.id=?',(pid,)).fetchone()[0])
+            scenes[weakest]=audience.revise(work,scenes[weakest],reports[weakest],brief)
+        if grade<80 and i>=5:
+            (folder/'final.mp4').unlink(missing_ok=True)
     db.execute('BEGIN IMMEDIATE')
     try:
         db.execute('UPDATE producao_etapas SET fim=? WHERE job=?',(time.time(),job['id']))
         if stage=='legendas':
             db.execute('INSERT OR REPLACE INTO producao_legendas VALUES(?,?,?,?)',(pid,i,(media/(name+'.srt')).read_text(),duration))
         if stage=='finalizar':
-            transition(db,pid,'aguardando_revisao_video')
-            db.execute("UPDATE producoes_video SET etapa='concluida',fim=?,arquivo_final=? WHERE id=?",(time.time(),str(folder/'final.mp4'),pid))
+            last=db.execute('SELECT COALESCE(MAX(rodada),0) FROM publico_producao WHERE producao=?',(pid,)).fetchone()[0]
+            enqueue(db,pid,'publico',last+1)
+            db.execute("UPDATE producoes_video SET etapa='teste de público',arquivo_final=NULL WHERE id=?",(pid,))
+        elif stage=='publico':
+            db.execute('INSERT INTO publico_producao VALUES(?,?,?,?)',(pid,i,grade,json.dumps(reports,ensure_ascii=False)))
+            if grade>=80:
+                transition(db,pid,'aguardando_revisao_video')
+                db.execute("UPDATE producoes_video SET etapa='concluida',fim=?,arquivo_final=? WHERE id=?",(time.time(),str(folder/'final.mp4'),pid))
+            elif i>=5:
+                transition(db,pid,'descartado',reports[weakest]['problema'])
+                db.execute("UPDATE producoes_video SET etapa='descartado pelo público',fim=?,arquivo_final=NULL WHERE id=?",(time.time(),pid))
+            else:
+                script=json.loads(row[0])
+                script['cenas']=scenes
+                db.execute('UPDATE roteiros SET dados=? WHERE id=?',(json.dumps(script,ensure_ascii=False),pid))
+                db.execute('UPDATE cenas SET dados=? WHERE roteiro=? AND ordem=?',(json.dumps(scenes[weakest],ensure_ascii=False),pid,weakest))
+                for step in ('broll','narracao','montagem','legendas','finalizar'):
+                    index=0 if step=='finalizar' else weakest
+                    task=db.execute('SELECT job FROM producao_etapas WHERE producao=? AND etapa=? AND cena=?',(pid,step,index)).fetchone()[0]
+                    db.execute("UPDATE jobs SET state='queued',error=NULL WHERE id=?",(task,))
+                    db.execute('UPDATE producao_etapas SET inicio=NULL,fim=NULL WHERE job=?',(task,))
         else:
             candidates=db.execute("""SELECT e.job,e.etapa,e.cena FROM producao_etapas e JOIN jobs j ON j.id=e.job
                 WHERE e.producao=? AND j.state='queued' LIMIT 1""",(pid,)).fetchone()
@@ -256,13 +285,29 @@ def process(db,work,job):
         raise
 
 
+def queue_pending_reviews(db):
+    db.execute('BEGIN IMMEDIATE')
+    try:
+        pending=db.execute("""SELECT r.id FROM roteiros r JOIN producoes_video p ON p.id=r.id
+            WHERE r.status='aguardando_revisao_video' AND p.arquivo_final IS NOT NULL
+            AND NOT EXISTS(SELECT 1 FROM publico_producao a WHERE a.producao=r.id)""").fetchall()
+        for (pid,) in pending:
+            transition(db,pid,'em_producao')
+            db.execute("UPDATE producoes_video SET arquivo_final=NULL,fim=NULL,etapa='teste de público' WHERE id=?",(pid,))
+            enqueue(db,pid,'publico',1)
+        db.commit()
+    except BaseException:
+        db.rollback()
+        raise
+
+
 def review(db,pid):
     row=db.execute('SELECT * FROM producoes_video WHERE id=?',(pid,)).fetchone()
     if not row:
         return None
     steps=[dict(r) for r in db.execute('SELECT etapa,cena,inicio,fim FROM producao_etapas WHERE producao=? ORDER BY job',(pid,))]
     assets=[dict(r) for r in db.execute('SELECT cena,origem,url,autor,licenca FROM assets_producao WHERE producao=? ORDER BY cena',(pid,))]
-    return dict(etapa=row['etapa'],erro=row['erro'],chamadas=row['chamadas_pexels'],etapas=steps,
+    return dict(publico=[dict(rodada=r[0],nota=r[1],cenas=json.loads(r[2])) for r in db.execute("SELECT rodada,nota,relatorio FROM publico_producao WHERE producao=? ORDER BY rodada",(pid,))],etapa=row['etapa'],erro=row['erro'],chamadas=row['chamadas_pexels'],etapas=steps,
                 pronto=bool(row['arquivo_final']),assets=assets,legendas=[dict(r) for r in db.execute(
                     'SELECT cena,srt,segundos FROM producao_legendas WHERE producao=? ORDER BY cena',(pid,))])
 
