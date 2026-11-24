@@ -299,7 +299,8 @@ def render(cid, final):
     command(["ffmpeg","-loglevel","error","-y","-ss",str(row["start"]),"-i",str(ROOT/"media"/row["media"]),"-t",str(row["end"]-row["start"]),"-filter_complex",filters,"-map","[out]","-map",audio_map,"-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-movflags","+faststart",str(tmp)])
     from studio import supervisor
     progress(kind,cid,"Revisando a edição" if roteiros.config().get('GEMINI_API_KEY') else "Finalizando a edição")
-    verdict=supervisor.review(db,'Corte final' if final else 'Prévia',cid,dict(titulo=row['title'],estilo=settings),tmp)
+    verdict=supervisor.review(db,'Corte final' if final else 'Prévia',cid,dict(titulo=row['title'],estilo=settings,inicio=row['start'],fim=row['end'],
+        duracao=row['end']-row['start'],legendas=blocks,orientacoes=supervisor.guidance(db,['Prévia','Corte final'])),tmp)
     if verdict and verdict['parecer']=='devolver':
         tmp.unlink(missing_ok=True)
         raise ValueError('Edição devolvida pelo Gemini: '+verdict['ajuste'])
@@ -369,7 +370,17 @@ def score_audience(cid, output):
         marker.truncate()
         json.dump([cid,int(time.time())],marker)
         marker.flush()
+        from studio import supervisor
         _score_audience(cid,output)
+        if roteiros.config().get('GEMINI_API_KEY'):
+            row=db.execute('SELECT project,title FROM clips WHERE id=?',(cid,)).fetchone()
+            report=json.loads(Path(output).read_text())
+            context=dict(titulo=row['title'],parecer_do_publico=report,
+                         pergunta='Você concorda com o teste do Caio? Compare notas e motivos com o vídeo e explique.')
+            verdict=supervisor.review(db,'Teste de público',cid,context,WORK/row['project']/(cid+'-preview.mp4'))
+            if verdict:
+                report['mentor']=verdict
+                Path(output).write_text(json.dumps(report,ensure_ascii=False))
 
 
 def _score_audience(cid, output):
@@ -385,6 +396,8 @@ def _score_audience(cid, output):
     duration = row["end"]-row["start"]
     inputs = {"titulo":row["title"],"duracao":duration,"falas":[[round(max(0,s["start"]-row["start"]),2),s["text"]] for s in segments],
               "palavras_por_minuto":round(60*sum(len(s["text"].split()) for s in segments)/duration)}
+    from studio import supervisor
+    inputs['orientacoes_ao_Caio']=supervisor.guidance(conn,['Teste de público','Vídeo'])
     if tiny:
         preview = WORK / row["project"] / (row["id"]+"-preview.mp4")
         subprocess.run([os.getenv("TINYTROUPE_PYTHON") or sys.executable,

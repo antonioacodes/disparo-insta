@@ -168,7 +168,9 @@ def stage(db,work,job):
     record=db.execute('SELECT resultado FROM roteiro_etapas WHERE job=?',(job['id'],)).fetchone()
     if record[0] is not None:
         return
+    from studio import supervisor
     b=json.loads(row['brief'])
+    b['orientacoes_do_mentor']=supervisor.guidance(db,['Cena','Roteiro','Vídeo'])
     def previous(name):
         return [json.loads(r[0]) for r in db.execute('SELECT resultado FROM roteiro_etapas WHERE roteiro=? AND etapa=? AND resultado IS NOT NULL ORDER BY ordem',(ident,name))]
     def ask(prompt,data):
@@ -189,15 +191,23 @@ def stage(db,work,job):
         next_stage=('escrita',0)
     elif kind=='escrita':
         scene=plan[0][order]
-        result=ask('Escreva esta cena. Retorne {narracao,resumo,legenda_destaque,estilo_visual,som_ambiente,fontes,verificar}. Em som_ambiente sugira uma busca curta em inglês para o ambiente sonoro apropriado ao clima desta cena, por exemplo light rain ambience, ou deixe vazio para silêncio. Respeite a duração a cento e quarenta palavras por minuto.',
-                   dict(briefing=b,cena=scene,resumos=[s['resumo'] for s in previous('escrita')][-12:]))
-        result.update(id=f'c{order+1:02d}',tipo=scene['tipo'],duracao_segundos=scene['duracao_segundos'])
-        for key in ('narracao','resumo','legenda_destaque','estilo_visual'):
-            text(result[key])
-        result['fontes']=[f for f in strings(result.get('fontes',[])) if f in b['fontes_de_pesquisa']]
-        result['verificar']=result.get('verificar') is not False or not result['fontes']
-        if re.search(r'\d',result['narracao']):
-            raise ValueError('A narração contém algarismos.')
+        feedback=''
+        for attempt in range(5):
+            result=ask('Escreva esta cena. Retorne {narracao,resumo,legenda_destaque,estilo_visual,som_ambiente,fontes,verificar}. Em som_ambiente sugira uma busca curta em inglês para o ambiente sonoro apropriado ao clima desta cena, por exemplo light rain ambience, ou deixe vazio para silêncio. Respeite a duração a cento e quarenta palavras por minuto.',
+                       dict(briefing=b,cena=scene,orientacao=feedback,resumos=[s['resumo'] for s in previous('escrita')][-12:]))
+            result.update(id=f'c{order+1:02d}',tipo=scene['tipo'],duracao_segundos=scene['duracao_segundos'])
+            for key in ('narracao','resumo','legenda_destaque','estilo_visual'):
+                text(result[key])
+            result['fontes']=[f for f in strings(result.get('fontes',[])) if f in b['fontes_de_pesquisa']]
+            result['verificar']=result.get('verificar') is not False or not result['fontes']
+            if re.search(r'\d',result['narracao']):
+                raise ValueError('A narração contém algarismos.')
+            verdict=supervisor.review(db,'Cena',ident+':'+str(order+1),dict(briefing=b,plano=scene,cena=result))
+            if not verdict or verdict['parecer']=='favoravel':
+                break
+            feedback=verdict['problema']+' '+verdict['ajuste']
+            if attempt==4:
+                raise ValueError('Cena devolvida à Bia: '+feedback)
         next_stage=('escrita',order+1) if order+1<len(plan[0]) else ('broll',0)
     elif kind=='broll':
         result=strings(ask('Retorne {termos:[string]} com termos concretos de b-roll em inglês.',previous('escrita')[order])['termos'],True)

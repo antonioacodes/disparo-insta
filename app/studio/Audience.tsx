@@ -1,4 +1,4 @@
-export type Verdict={motor?:string;geral:number; dimensoes:Record<string,number>; resumo:string; sugestao:string; personas:{perfil:string;motivo:string;notas?:Record<string,number>}[]; erro?:string;retryAt?:number};
+export type Verdict={mentor?:{parecer:string;positivo:string;problema:string;ajuste:string};motor?:string;geral:number; dimensoes:Record<string,number>; resumo:string; sugestao:string; personas:{perfil:string;motivo:string;notas?:Record<string,number>}[]; erro?:string;retryAt?:number};
 const guide='https://github.com/antonioacodes/disparo-insta/blob/feat/painel-fila-meta/docs/teste-tinytroupe.md';
 export function Audience({v,status,clip,removed}:{v?:Verdict;status?:string;clip:{state:string};removed:boolean}){
   if(!v || v.erro){
@@ -18,6 +18,7 @@ export function Audience({v,status,clip,removed}:{v?:Verdict;status?:string;clip
       <strong style={{display:'grid',placeItems:'center',background:'white',borderRadius:'50%',width:46,height:46}}>{v.geral}</strong>
     </span> {v.motor || "Ollama"} · Público simulado · {v.geral}/100</summary><p>{v.resumo}</p>
     {Object.entries(v.dimensoes).map(([name,n])=><p key={name}>{name} · {n}/100 <meter min={0} max={100} value={n}/></p>)}
+    {v.mentor&&<section><strong>Revisado pelo Google Gemini</strong><p>{v.mentor.positivo}</p><p>{v.mentor.problema}</p><p>{v.mentor.ajuste}</p></section>}
     <p><strong>Ajuste sugerido</strong> {v.sugestao}</p>
     {v.personas.map(person=><p key={person.perfil}><strong>{person.perfil}</strong> · {person.motivo}</p>)}
   </details>;

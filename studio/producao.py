@@ -238,7 +238,9 @@ def process(db,work,job):
         grade=audience.score(reports)
         weakest=min(range(len(scenes)),key=lambda n:audience.score([reports[n]]))
         from studio import supervisor
-        verdict=supervisor.review(db,'Vídeo',pid,dict(roteiro=scenes),folder/'final.mp4')
+        verdict=supervisor.review(db,'Vídeo',pid,dict(roteiro=scenes,avaliacao_do_publico=reports,nota_do_publico=grade,rodada=i,
+            criterio='Indique se concorda com as notas do Caio e justifique divergências com exemplos e tempos do vídeo.',
+            orientacoes=supervisor.guidance(db,['Vídeo','Prévia'])),folder/'final.mp4')
         returned=bool(verdict and verdict['parecer']=='devolver')
         if returned:
             index=verdict.get('cena')

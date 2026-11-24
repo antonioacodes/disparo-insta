@@ -98,3 +98,10 @@ def review(db,kind,ident,context,path=None):
 def history(db):
     return [dict(tipo=r[0],id=r[1],versao=r[2][:10],parecer=json.loads(r[3]),modelo=r[4],at=r[5])
             for r in db.execute('SELECT * FROM supervisor_reviews ORDER BY reviewed DESC LIMIT 30')]
+
+def guidance(db,kinds):
+    placeholders=','.join('?' for _ in kinds)
+    rows=db.execute(f"""SELECT json_extract(result,'$.ajuste') FROM supervisor_reviews
+        WHERE kind IN ({placeholders}) AND json_extract(result,'$.parecer')='devolver'
+        GROUP BY json_extract(result,'$.ajuste') ORDER BY MAX(reviewed) DESC LIMIT 5""",kinds)
+    return [r[0][:400] for r in rows]
